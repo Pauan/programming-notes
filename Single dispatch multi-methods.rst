@@ -73,11 +73,12 @@ multiple-inheritance::
 Oops, this doesn't work. We want to define some behavior for when ``MyBook``
 is used as a ``FileInput``, and different behavior when it's used as a
 ``Book``. But both ``FileInput`` and ``Book`` define a method called ``read``,
-so how do we distinguish between ``FileInput.read`` and ``Book.read``?
+and there's no way to distinguish between ``FileInput.read`` and
+``Book.read``.
 
 In addition, multiple-inheritance is complicated to implement and complicated
-to use. The order used when looking up a method in the class hierarchy
-is non-trivial.
+to use. The order of looking up a method in the class hierarchy is
+non-trivial.
 
 When you are reading some code and you see a class that inherits from multiple
 classes, do you really want to sit there and try to figure out which method is
@@ -106,7 +107,15 @@ were a bit safer.
 Python introduced `Abstract Base Classes <http://legacy.python.org/dev/peps/pep-3119/>`_
 which allows you to do duck-typing in a safer way, but it *still* doesn't
 solve the problem of wanting ``MyBook`` to have different behavior when used
-as a ``FileInput`` and when used as a ``Book``!
+as a ``FileInput`` and when used as a ``Book``.
+
+So, Python has classes, instances, bound/unbound methods, multiple
+inheritance, *and* abstract base classes, yet it *still* can't solve this
+problem? Python keeps piling complexity on top of complexity, but perhaps
+we can find a simpler solution, rather than adding on yet-another ad-hoc
+feature.
+
+----
 
 Looking at another language, Ruby allows for "open classes", which means that
 you can add new methods to an existing class without creating a sub-class::
@@ -217,9 +226,9 @@ Okay, great! Now let's do the same for ``Book``::
       ...
 
 Now, it's important to note that although these two generic functions are both
-called ``read``, they are *actually different functions*, because of the way
-that Python modules work. That means you can use both of them without
-name collisions::
+called ``read``, they are *actually different functions*. Because they use
+Python's already-existing module system, you can use both of them without name
+collisions::
 
   import book
   import file
@@ -283,20 +292,20 @@ the same single-dispatch system.
 
 ----
 
-These "generic functions" are essentially multimethods, except they only
+Note: these "generic functions" are essentially multimethods, except they only
 dispatch on the type of the first argument. This allows them to be really
 really fast.
 
-It is possible to add multiple-dispatch later on, while remaining
-backwards-compatible. It is also possible to support multiple-dispatch and
-use an optimization when the only argument being dispatched on is the
-first.
+It is possible to add multiple-dispatch later on, in a backward-compatible
+way. But it is tricky to have full multimethods while keeping the speed of
+single dispatch. Which is why these generic functions only dispatch on the
+first argument.
 
 If you're familiar with Clojure, these "generic functions" are *extremely
 similar to* protocols, **except** you can create *individual* generic
 functions *without* bundling them together into a protocol.
 
-It is possible to add a protocol/interface layer on top of generic functions,
-if you so wish, but it's also possible to just use individual generic
+It is possible to add a protocol/interface/abstract base class layer on top
+of generic functions. But it's also possible to just use individual generic
 functions, without an explicit protocol/interface. It's up to you, the
 language designer.
