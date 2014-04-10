@@ -3,11 +3,14 @@ Python, and JavaScript) represent programs as a bunch of "classes". Each class
 is essentially a new type, which can contain various attributes (data) and
 methods (behavior).
 
-This way of writing programs is inevitably brittle and hard to extend, because
-behavior is mingled with data.
+This way of writing programs tends to be brittle and hard to extend. If the
+language tries to solve this problem while continuing to use traditional
+methods, the end result is a language which is quite complex.
 
-I will now show examples (in Python) to demonstrate this claim, and will then
-provide a simple and elegant solution to this problem.
+Making behavior separate from data provides a way to write flexible and
+extendable programs while keeping the language simple.
+
+I will now show examples (in Python) to demonstrate this claim.
 
 Consider the classes ``FileInput``, ``Iterator``, and ``Book``::
 
