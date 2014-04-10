@@ -32,7 +32,7 @@ can do this::
   foo.next()
 
 Now, what if you want to call the ``read`` method? You could just use
-``foo.read()``, but *depending on what type ``foo`` is*, it will call either
+``foo.read()``, but *depending on the type of* ``foo``, it will call either
 ``FileInput.read`` or ``Book.read``.
 
 The problem is that ``FileInput.read`` has vastly different behavior than
@@ -49,17 +49,17 @@ guaranteeing that ``foo.read()`` will call ``Book.read`` and not
 ``FileInput.read``.
 
 At first, this seems to solve the problem. But now we have another problem.
-What if we want to create a new class that is *similar to a ``Book``*?
+What if we want to create a new class that is *similar* to a ``Book``?
 The OOP way to do that is sub-classing::
 
   class MyBook(Book):
     def read(self):
       ...
 
-The above code creates a class ``MyBook`` that *inherits* from ``Book``. That
-means two things. First, it means that ``MyBook`` automatically inherits all
-the attributes and methods from ``Book``. Secondly, it means any place in the
-program that expects a ``Book`` will also work with ``MyBook``.
+The above code creates a class ``MyBook`` that *inherits* from the class
+``Book``. That means two things. First, it means that ``MyBook`` automatically
+inherits all the attributes and methods from ``Book``. Secondly, it means any
+place in the program that expects a ``Book`` will also work with ``MyBook``.
 
 So far so good, right? But now let's suppose we want ``MyBook`` to *also* be
 usable as a ``FileInput`` or ``Iterator``. Some OOP languages don't even
@@ -73,11 +73,11 @@ multiple-inheritance::
 Oops, this doesn't work. We want to define some behavior for when ``MyBook``
 is used as a ``FileInput``, and different behavior when it's used as a
 ``Book``. But both ``FileInput`` and ``Book`` define a method called ``read``,
-so it's impossible.
+so how do we distinguish between ``FileInput.read`` and ``Book.read``?
 
-In addition, even if it were somehow possible, multiple-inheritance is
-complicated to implement and complicated to use. The order used when looking
-up a method in the class hierarchy is non-trivial.
+In addition, multiple-inheritance is complicated to implement and complicated
+to use. The order used when looking up a method in the class hierarchy
+is non-trivial.
 
 When you are reading some code and you see a class that inherits from multiple
 classes, do you really want to sit there and try to figure out which method is
@@ -96,17 +96,19 @@ extend a program is to create a sub-class*.
 Python tries to work around this problem by using "duck-typing", which means
 that you would just call ``foo.read()`` and not check its type at all.
 
-But consider two different classes that both define a method with the same
-name but very different behavior (e.g. ``FileInput`` and ``Book``). In the
-*best case* you'll get an error, which is what you want. In the **worst case**
-you'll get subtle bugs that are hard to track down. It would be nice if
-duck-typing were a bit safer.
+But two different classes that both define a method with the same name can
+have *very* different behavior (e.g. ``FileInput`` and ``Book``). In the
+*best case* you'll get an error, which is what you want. In a *worse* case
+you'll get subtle bugs that are hard to track down. In the **worst case**
+you'll get nasty things like data corruption. It would be nice if duck-typing
+were a bit safer.
 
-In addition, it *still* doesn't solve the problem of wanting ``MyBook`` to
-have different behavior when used as a ``FileInput`` and when used as a
-``Book``!
+Python introduced `Abstract Base Classes <http://legacy.python.org/dev/peps/pep-3119/>`_
+which allows you to do duck-typing in a safer way, but it *still* doesn't
+solve the problem of wanting ``MyBook`` to have different behavior when used
+as a ``FileInput`` and when used as a ``Book``!
 
-I would like to note that Ruby allows for "open classes", which means that
+Looking at another language, Ruby allows for "open classes", which means that
 you can add new methods to an existing class without creating a sub-class::
 
   class String
@@ -127,9 +129,14 @@ You might reasonably want to choose which method to use, or perhaps even use
 both, but that's impossible. Whichever method was defined last will overwrite
 the previous method.
 
+There is a common pattern here about method names colliding. Some languages
+use a namespace or module system to prevent *variables* from colliding, but
+most languages do *not* use a namespace system to prevent *methods* from
+colliding.
+
 So, now that I have demonstrated that standard OOP techniques (including
-duck-typing, multiple-inheritance, and open classes) are lacking, how can we
-fix it?
+duck-typing, multiple-inheritance, abstract base classes, and open classes)
+are lacking, how can we fix it?
 
 There are many ways, but I'm going to focus on one way in particular.
 
