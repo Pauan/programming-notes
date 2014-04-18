@@ -50,6 +50,113 @@ Anyways, onto the code!
     (external/new x @args))
 
 
+  (external/type Error = Error message)
+
+  (def error -> x
+    (external/throw (new Error x)))
+
+
+  # This is all basically Promise stuff, but I prefer the name Delay rather than
+  # Promise.
+  #
+  # Delays/Promises/Futures/whatever you want to call them provide an interesting
+  # way of explicitly dealing with asynchronous stuff in your program.
+  #
+  # The basic idea is, if you gotta do something asynchronous, like read a file or
+  # whatever, normally you would have a callback function that is called when the
+  # operation is completed.
+  #
+  # Instead, it's a lot nicer if you return a Delay, which is an object that
+  # represents a value that isn't ready right now, but will be ready in the future.
+  #
+  # You can then call wait on the Delay, which will return a new Delay that
+  # calls the function when the input Delay is complete:
+  #
+  #   # wait until the read-file function completes, then do stuff with the file
+  #   (wait (read-file "foo") -> file
+  #     ...)
+  #
+  # Wait a sec, how is this any better than passing a callback argument to the
+  # read-file function? Well, honestly, it isn't. But! We can do other nifty
+  # things with Delay that you can't do with callbacks.
+  #
+  # For instance, since Delays are first class values, you can store them in
+  # variables or map over them:
+  #
+  #   (var files = (map ["foo" "bar" "qux"] read-file))
+  #
+  # The above will read the files "foo", "bar", and "qux" *in parallel*. To get
+  # the completed values, you can use wait/each, wait/map, wait/keep, or
+  # wait/fold:
+  #
+  #   # do something for each file
+  #   (wait/each files -> file
+  #     ...)
+  #
+  # The various wait/ functions work incrementally: they don't wait for all the
+  # Delays to complete. But they still maintain the order of the list.
+  #
+  # Trying to do all that with standard Node.js callbacks is a huuuuuuuuuge pain
+  # in the butt, which is why you have libraries like Async.js
+  #
+  # So, Delays let you write async code which is simple and clear and powerful...
+  # *without* needing to use callbacks or Async.js
+  #
+  # Oh yeah, and there's a >> macro which makes it easy to chain Delays:
+  #
+  #   # read the file "foo"
+  #   # then convert it to JSON
+  #   # then map over the JSON, reading a file for each element in the JSON array
+  #   (>> (read-file "foo")
+  #       (->json %)
+  #       (map % read-file))
+  #
+  # Inside the >> macro, you can use % to refer to the value of the previous Delay
+  # in the chain.
+  #
+  # Despite all that, I'm not a fan of Delays, because certain async things are
+  # still clunky to write with Delays. But they are now built-in to ECMAScript 6,
+  # and various JavaScript APIs (including built-ins!) will be returning
+  # promises in the near future, so Nulan has to cope with that.
+  #
+  # TODO built-in Promises don't have an initializer property
+  (external/type Delay = Promise initializer)
+
+  # Waits for a delayed value to complete, then calls the function
+  # If the function returns a delayed value, it will wait for that to finish before completing
+  # Returns a new delayed value, so it is composable
+  (generic wait -> (isa Delay x) f
+    (x.then f))
+
+  # Lets you convert an asynchronous thing into a Delay, like so:
+  #
+  #   (def delay/for -> x i
+  #     (delay -> done error
+  #       (setTimeout (-> (done x)) i)))
+  #
+  #   (def timeout -> i
+  #     (delay -> done error
+  #       (setTimeout (-> (error "timeout")) i)))
+  #
+  #   # Returns a delayed value which will be 5 after 1000 milliseconds
+  #   (delay/for 5 1000)
+  #
+  #   # Returns a delayed value which will throw an error after 1000 milliseconds
+  #   # Useful if you want to abort an asynchonous call after a set amount of time
+  #   (timeout 1000)
+  #
+  (def delay -> f
+    (new Delay -> done error
+      (f done (-> x (error (new Error x))))))
+
+  # If the value is already a Delay, it returns it as-is
+  # Otherwise, it delays the value for essentially 0ms
+  # Useful if you want to pass a value to wait
+  # TODO shouldn't this be generic ?
+  (def delay/value -> x
+    (Delay.resolve x))
+
+
   # TODO how to implement primitive types (null, numbers, strings) efficiently ?
   #(type Void)
 
@@ -138,7 +245,6 @@ Anyways, onto the code!
   # You only need to extend traverse to get traversal (foldl, some, every, etc)
   # If you also extend push and empty, then you get all kinds of things for free,
   # like map/zip/filter/len/etc
-  (generic traverse) # should return step/done to traverse the list
   (generic empty)    # should return an empty version of the list
   (generic push)     # should add a new item to the list and return the list
 
