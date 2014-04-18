@@ -50,10 +50,17 @@ Anyways, onto the code!
     (external/new x @args))
 
 
+  # TODO how to implement primitive types (null, numbers, strings) efficiently ?
+  #(type Void)
+
+  #(def void? -> x
+  #  (isa? x Void))
+
   (external/type Error = Error message)
 
   (def error -> x
     (external/throw (new Error x)))
+
 
 
   # This is all basically Promise stuff, but I prefer the name Delay rather than
@@ -156,12 +163,31 @@ Anyways, onto the code!
   (def delay/value -> x
     (Delay.resolve x))
 
+  # Shows how to wrap a Node.js function to return a Delay
+  # TODO should use Promise.promisify or something instead ?
+  (def read-file -> path
+    (delay -> done error
+      ((require "fs").readFile path { encoding = "utf8" } -> err file
+        (if err
+          (error err)
+          (done file)))))
 
-  # TODO how to implement primitive types (null, numbers, strings) efficiently ?
-  #(type Void)
+  # TODO this shouldn't rely upon the fact that push mutates
+  (def get-all-files -> path
+    (let r = []
+      (loop s = path
+        (wait (get-files s) -> files
+          (each files -> x
+            # TODO I think this can cause the list to be out-of-order
+            (wait (file? x) -> f?
+              (if f?
+                (push r x)
+                (wait (dir? x) -> d?
+                  (if d?
+                    (loop x)
+                    (error "expected file or directory"))))))))
+      r))
 
-  #(def void? -> x
-  #  (isa? x Void))
 
 
   # This creates a new type for hash tables rather than reusing JavaScript's Object.
@@ -211,8 +237,8 @@ Anyways, onto the code!
   # These should be used *only* to traverse a list.
   #
   # If people start treating these like cons cells, we'll end up with functions
-  # like map returning them, which I don't want. The only function that should
-  # return Step and Done is the generic function traverse.
+  # like map returning Step/Done. I don't want that. The only function that
+  # should return Step or Done is the generic function traverse.
   #
   # I'm fine with having actual cons cells, but they should be called cons cells,
   # and they would have to extend the traverse generic just like any other list.
@@ -240,6 +266,71 @@ Anyways, onto the code!
 
 
 
+  # Hypothetical cons implementation. I don't plan to actually use this, but
+  # it does demonstrate the distinct similarities between Step/Done and Cons/Nil
+  #
+  # It's also a decent demonstration of how easy it is to define new data types in Nulan.
+  #
+  # Note that cons cells extend some stuff that Step/Done don't, because they need to
+  # be usable in things like map/keep/foldl/etc
+  #
+  (type Nil @Done)
+  (type Cons @Step)
+
+  # nil is a singleton value used to represent the empty list
+  (var nil = (new Nil))
+
+  (extend empty -> (isa Cons x)
+    nil)
+
+  # TODO should maybe return x instead ?
+  # TODO maybe it should be an error to call empty on nil ?
+  (extend empty -> (isa Nil x)
+    nil)
+
+  # TODO I don't think this is correct... the list will be in reverse order!
+  (extend push -> (isa Cons x) y
+    (cons y x))
+
+  # It would be trivial to make cons lazy like Step, but I decided to go for a normal strict version
+  (def cons -> x y
+    (new Cons x y))
+
+  # Other types may want to use car/cdr too, so they're generic rather than normal functions
+  (generic car -> (isa Cons x)
+    x.value)
+
+  (generic cdr -> (isa Cons x)
+    x.next)
+
+  # Names shamelessly taken from Arc
+  # Fun fact: with Nulan's type dispatch system, trying to call
+  #           scar/scdr on nil is automatically a type error!
+  # TODO (<= (car x) value) should work
+  # TODO (<= (cdr x) value) should work
+  (generic scar -> (isa Cons x) v
+    (<= x.value v))
+
+  (generic scdr -> (isa Cons x) v
+    (<= x.next v))
+
+  # This is the same behavior as Common Lisp and Arc: calling car/cdr on nil returns nil
+  # You can remove these to get the Scheme behavior where calling car/cdr on nil throws an error
+  (extend car -> (isa Nil x)
+    x)
+
+  (extend cdr -> (isa Nil x)
+    x)
+
+  # Make it work as a traversable, so all the list goodies automatically work on it
+  (extend next -> (isa Cons x)
+    (cdr x))
+
+  (extend traverse -> (isa Cons x)
+    x)
+
+
+
   # Generic functions for lists
 
   # You only need to extend traverse to get traversal (foldl, some, every, etc)
@@ -247,6 +338,8 @@ Anyways, onto the code!
   # like map/zip/filter/len/etc
   (generic empty)    # should return an empty version of the list
   (generic push)     # should add a new item to the list and return the list
+
+  # Look at all these lovely functions that you get for free if you extend traverse/empty/push
 
   # If you extend traverse you get len for free, but some lists have a faster
   # (usually constant time) length function, which is why you can extend len
@@ -259,7 +352,6 @@ Anyways, onto the code!
         (recur (next y)
                (+ i 1)))))
 
-  # Look at all these lovely functions that you get for free if you extend traverse/empty/push
   (def foldl -> x init f
     (loop v = init
           t = (traverse x)
@@ -329,7 +421,7 @@ Anyways, onto the code!
             false
           (f (value t))
             true
-          (loop (next t)))))
+          (recur (next t)))))
 
   (def every -> x f
     (not (some x -> y (not (f y)))))
@@ -343,9 +435,9 @@ Anyways, onto the code!
           r = (empty x)
       (if (done? y)
         r
-        (loop (next y)
-              (map a next)
-              (push r (map a value))))))
+        (recur (next y)
+               (map a next)
+               (push r (map a value))))))
 
   # Super useful if you want to map over multiple lists simultaneously, like so:
   #
@@ -359,6 +451,12 @@ Anyways, onto the code!
     (map (zip @a) -> x
       (f @x)))
 
+
+  # TODO this macro doesn't work due to duplicate variables being invalid in Nulan
+  ($mac >> -> x @args
+    (w/sym %
+      (foldl args x -> out in
+        `(wait out -> % in))))
 
 
   # Uses native JavaScript arrays for Raah Speehd!!!1!
