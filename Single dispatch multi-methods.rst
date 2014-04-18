@@ -35,7 +35,7 @@ can do this::
   foo.next()
 
 Now, what if you want to call the ``read`` method? You could just use
-``foo.read()``, but *depending on the type of* ``foo``, it will call either
+``foo.read()``, but... *depending on the type of* ``foo``, it will call either
 ``FileInput.read`` or ``Book.read``.
 
 The problem is that ``FileInput.read`` has vastly different behavior than
@@ -61,8 +61,8 @@ The OOP way to do that is sub-classing::
 
 The above code creates a class ``MyBook`` that *inherits* from the class
 ``Book``. That means two things. First, it means that ``MyBook`` automatically
-inherits all the attributes and methods from ``Book``. Secondly, it means any
-place in the program that expects a ``Book`` will also work with ``MyBook``.
+has all the attributes and methods from ``Book``. Second, it means any place
+in the program that works with ``Book`` will also work with ``MyBook``.
 
 So far so good, right? But now let's suppose we want ``MyBook`` to *also* be
 usable as a ``FileInput`` or ``Iterator``. Some OOP languages don't even
@@ -308,7 +308,7 @@ If you're familiar with Clojure, these "generic functions" are *extremely
 similar to* protocols, **except** you can create *individual* generic
 functions *without* bundling them together into a protocol.
 
-It is possible to add a protocol/interface/abstract base class layer on top
+It is possible to add a protocol/interface/abstract-base-class layer on top
 of generic functions. But it's also possible to just use individual generic
 functions, without an explicit protocol/interface. It's up to you, the
 language designer.
