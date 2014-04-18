@@ -184,10 +184,24 @@ Anyways, onto the code!
                 (push r x)
                 (wait (dir? x) -> d?
                   (if d?
-                    (loop x)
+                    (recur x)
                     (error "expected file or directory"))))))))
       r))
 
+
+  # !!! EXPERIMENTAL !!!
+  # Uses ES6 generators so you can write code that truly looks synchronous,
+  # but is still async under the hood
+  #
+  # TODO test the performance of generators + promises
+  (def get-all-files -> path
+    (async
+      (foldl %(get-files s) -> out in
+        (if %(file? in)
+              (push out in)
+            %(dir? x)
+              (concat out %(get-all-files in))
+            (error "expected file or directory")))))
 
 
   # This creates a new type for hash tables rather than reusing JavaScript's Object.
@@ -450,6 +464,18 @@ Anyways, onto the code!
   (def mapzip -> @a f
     (map (zip @a) -> x
       (f @x)))
+
+  # TODO should be generic so it works on non-traversable things too
+  (def copy -> x
+    (foldl x (empty x) -> out in
+      (push out in)))
+
+  # TODO implement wait/concat as well ?
+  (def concat -> x @args
+    # TODO copy is only needed because arrays are mutable
+    (foldl args (copy x) -> out in
+      (foldl in out -> out2 in2
+        (push out2 in2))))
 
 
   # TODO this macro doesn't work due to duplicate variables being invalid in Nulan
