@@ -172,21 +172,19 @@ Anyways, onto the code!
           (error err)
           (done file)))))
 
-  # TODO this shouldn't rely upon the fact that push mutates
+  # This is an example of an asynchronous algorithm that's sucky even with Delay
   (def get-all-files -> path
-    (let r = []
-      (loop s = path
-        (wait (get-files s) -> files
-          (each files -> x
-            # TODO I think this can cause the list to be out-of-order
-            (wait (file? x) -> f?
-              (if f?
-                (push r x)
-                (wait (dir? x) -> d?
-                  (if d?
-                    (recur x)
-                    (error "expected file or directory"))))))))
-      r))
+    (wait (get-files s) -> files
+      (foldl files [] -> out x
+        # TODO does this cause the list to be out of order ?
+        (wait (file? x) -> f?
+          (if f?
+            (push out x)
+            (wait (dir? x) -> d?
+              (if d?
+                (wait (get-all-files x) -> files2
+                  (concat out files2))
+                (error "expected file or directory"))))))))
 
 
   # !!! EXPERIMENTAL !!!
@@ -196,12 +194,12 @@ Anyways, onto the code!
   # TODO test the performance of generators + promises
   (def get-all-files -> path
     (async
-      (foldl %(get-files s) -> out in
-        (if %(file? in)
-              (push out in)
-            %(dir? x)
-              (concat out %(get-all-files in))
-            (error "expected file or directory")))))
+      (foldl ~(get-files s) [] -> out x
+        (if ~(file? x)
+               (push out x)
+            ~(dir? x)
+               (concat out ~(get-all-files x))
+             (error "expected file or directory")))))
 
 
   # This creates a new type for hash tables rather than reusing JavaScript's Object.
@@ -482,7 +480,10 @@ Anyways, onto the code!
   ($mac >> -> x @args
     (w/sym %
       (foldl args x -> out in
-        `(wait out -> % in))))
+        ~(wait out -> % in))))
+
+  ($mac ++ -> x
+    `(<= x (+ x 1)))
 
 
   # Uses native JavaScript arrays for Raah Speehd!!!1!
