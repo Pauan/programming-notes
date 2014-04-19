@@ -53,8 +53,8 @@ Anyways, onto the code!
   # TODO how to implement primitive types (null, numbers, strings) efficiently ?
   #(type Void)
 
-  #(def void? -> x
-  #  (isa? x Void))
+  #(generic void? -> (isa Void x)
+  #  true)
 
   (external/type Error = Error message)
 
@@ -186,20 +186,33 @@ Anyways, onto the code!
                   (concat out files2))
                 (error "expected file or directory"))))))))
 
+  # TODO not a correct implementation
+  (def async/fn -> f
+    (-> @args
+      (delay -> done error
+        (let x = (f @args)
+          (wait x -> v
+            (done v))
+          ))))
+
+  ($mac async -> body
+    `((async/fn -> body)))
+
+  ($mac async/def -> name fn
+    `(def name (async/fn fn)))
 
   # !!! EXPERIMENTAL !!!
   # Uses ES6 generators so you can write code that truly looks synchronous,
   # but is still async under the hood
   #
   # TODO test the performance of generators + promises
-  (def get-all-files -> path
-    (async
-      (foldl ~(get-files s) [] -> out x
-        (if ~(file? x)
-               (push out x)
-            ~(dir? x)
-               (concat out ~(get-all-files x))
-             (error "expected file or directory")))))
+  (async/def get-all-files -> path
+    (foldl ~(get-files s) [] -> out x
+      (if ~(file? x)
+             (push out x)
+          ~(dir? x)
+             (concat out ~(get-all-files x))
+           (error "expected file or directory"))))
 
 
   # Functional iterators
@@ -224,8 +237,8 @@ Anyways, onto the code!
 
   (type Step value next)
 
-  (def done? -> x
-    (isa? x Done))
+  (generic done? -> (isa Done x)
+    true)
 
   (def step -> value next
     (new Step value next))
@@ -244,13 +257,13 @@ Anyways, onto the code!
 
   # Generic functions for lists
 
-  # You only need to extend traverse to get traversal (foldl, some, every, etc)
+  # You only need to extend traverse to get traversal (each/foldl/some/every/len/etc)
+  #
   # If you also extend push and empty, then you get all kinds of things for free,
-  # like map/zip/filter/len/etc
-  (generic empty)    # should return an empty version of the list
-  (generic push)     # should add a new item to the list and return the list
-
-  # Look at all these lovely functions that you get for free if you extend traverse/empty/push
+  # including but not limited to map/zip/keep
+  #
+  (generic empty)  # should return an empty version of the list
+  (generic push)   # should add a new item to the list and return the list
 
   # If you extend traverse you get len for free, but some lists have a faster
   # (usually constant time) length function, which is why you can extend len
@@ -441,18 +454,6 @@ Anyways, onto the code!
   # nil is a singleton value used to represent the empty list
   (var nil = (new Nil))
 
-  (extend empty -> (isa Cons x)
-    nil)
-
-  # TODO should maybe return x instead ?
-  # TODO maybe it should be an error to call empty on nil ?
-  (extend empty -> (isa Nil x)
-    nil)
-
-  # TODO I don't think this is correct... the list will be in reverse order!
-  (extend push -> (isa Cons x) y
-    (cons y x))
-
   # It would be trivial to make cons lazy like Step, but I decided to go for a normal strict version
   (def cons -> x y
     (new Cons x y))
@@ -463,6 +464,14 @@ Anyways, onto the code!
 
   (generic cdr -> (isa Cons x)
     x.next)
+
+  # This is the same behavior as Common Lisp and Arc: calling car/cdr on nil returns nil
+  # You can remove these to get the Scheme behavior where calling car/cdr on nil throws an error
+  (extend car -> (isa Nil x)
+    x)
+
+  (extend cdr -> (isa Nil x)
+    x)
 
   # Names shamelessly taken from Arc
   # Fun fact: with Nulan's type dispatch system, trying to call
@@ -475,18 +484,27 @@ Anyways, onto the code!
   (generic scdr -> (isa Cons x) v
     (<= x.next v))
 
-  # This is the same behavior as Common Lisp and Arc: calling car/cdr on nil returns nil
-  # You can remove these to get the Scheme behavior where calling car/cdr on nil throws an error
-  (extend car -> (isa Nil x)
-    x)
-
-  (extend cdr -> (isa Nil x)
-    x)
-
   # Make it work as a traversable, so all the list goodies automatically work on it
+  (extend empty -> (isa Cons x)
+    nil)
+
+  # TODO maybe it should be an error to call empty on nil ?
+  (extend empty -> (isa Nil x)
+    x)
+
+  # TODO I don't think this is correct... the list will be in reverse order!
+  (extend push -> (isa Cons x) y
+    (cons y x))
+
+  # We don't need to extend value, because Cons inherits from Step, and the implementation
+  # of value is the same for both Cons and Step
+  #
+  # We *do* need to extend next, because Step is lazy but Cons is strict
   (extend next -> (isa Cons x)
     (cdr x))
 
+  # TODO If traverse traversed the cons in reverse order, then push would work but then
+  #      it would break the invariant that map/each/etc work from left-to-right...
   (extend traverse -> (isa Cons x)
     x)
 
