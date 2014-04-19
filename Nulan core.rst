@@ -202,41 +202,6 @@ Anyways, onto the code!
              (error "expected file or directory")))))
 
 
-  # This creates a new type for hash tables rather than reusing JavaScript's Object.
-  #
-  # This is because I prefer disjoint types: arrays and hash tables are different,
-  # and serve different purposes, so functions defined on one should not work on the
-  # other.
-  #
-  # So by using a new type, I ensure that calling list functions on a hash table
-  # throws an error, and calling hash table functions on a list throws an error.
-  #
-  # In addition, this allows me to safely extend Hash without mucking up
-  # Object.prototype. Though... that's actually a moot point, since extending Any
-  # already mucks up Object.prototype. Oh well.
-  #
-  # TODO how much slower is this than using plain JS objects ?
-  # TODO open problem: should {} expand to (new Hash) ? Obviously yes, but how much slower is it ?
-  (type Hash)
-
-  (generic has? -> (isa Hash x) key
-    (external/has? x key))
-
-  (generic get -> (isa Hash x) key (opt f)
-    (if (has? x key)
-          (external/get x key)
-        # TODO can we handle optional args better ?
-        (void? f)
-          (error "the key @key is not in the hash table")
-        (f)))
-
-  # TODO what about saying (<= (get hash key) value) ?
-  (generic set -> (isa Hash x) key value
-    (do (<= (external/get x key) value)
-        x))
-
-
-
   # Functional iterators
 
   # See (extend traverse -> (isa Array x) ...) below for an example implementation
@@ -275,72 +240,6 @@ Anyways, onto the code!
     x.value)
 
   (generic traverse)
-
-
-
-  # Hypothetical cons implementation. I don't plan to actually use this, but
-  # it does demonstrate the distinct similarities between Step/Done and Cons/Nil
-  #
-  # It's also a decent demonstration of how easy it is to define new data types in Nulan.
-  #
-  # Note that cons cells extend some stuff that Step/Done don't, because they need to
-  # be usable in things like map/keep/foldl/etc
-  #
-  (type Nil @Done)
-  (type Cons @Step)
-
-  # nil is a singleton value used to represent the empty list
-  (var nil = (new Nil))
-
-  (extend empty -> (isa Cons x)
-    nil)
-
-  # TODO should maybe return x instead ?
-  # TODO maybe it should be an error to call empty on nil ?
-  (extend empty -> (isa Nil x)
-    nil)
-
-  # TODO I don't think this is correct... the list will be in reverse order!
-  (extend push -> (isa Cons x) y
-    (cons y x))
-
-  # It would be trivial to make cons lazy like Step, but I decided to go for a normal strict version
-  (def cons -> x y
-    (new Cons x y))
-
-  # Other types may want to use car/cdr too, so they're generic rather than normal functions
-  (generic car -> (isa Cons x)
-    x.value)
-
-  (generic cdr -> (isa Cons x)
-    x.next)
-
-  # Names shamelessly taken from Arc
-  # Fun fact: with Nulan's type dispatch system, trying to call
-  #           scar/scdr on nil is automatically a type error!
-  # TODO (<= (car x) value) should work
-  # TODO (<= (cdr x) value) should work
-  (generic scar -> (isa Cons x) v
-    (<= x.value v))
-
-  (generic scdr -> (isa Cons x) v
-    (<= x.next v))
-
-  # This is the same behavior as Common Lisp and Arc: calling car/cdr on nil returns nil
-  # You can remove these to get the Scheme behavior where calling car/cdr on nil throws an error
-  (extend car -> (isa Nil x)
-    x)
-
-  (extend cdr -> (isa Nil x)
-    x)
-
-  # Make it work as a traversable, so all the list goodies automatically work on it
-  (extend next -> (isa Cons x)
-    (cdr x))
-
-  (extend traverse -> (isa Cons x)
-    x)
-
 
 
   # Generic functions for lists
@@ -425,7 +324,6 @@ Anyways, onto the code!
   (def wait/all -> x
     (wait/map x -> v v))
 
-
   # The only function that can't be defined in terms of foldl :(
   (def some -> x f
     (loop t = (traverse x)
@@ -476,6 +374,124 @@ Anyways, onto the code!
         (push out2 in2))))
 
 
+
+  # This creates a new type for hash tables rather than reusing JavaScript's Object.
+  #
+  # This is because I prefer disjoint types: arrays and hash tables are different,
+  # and serve different purposes, so functions defined on one should not work on the
+  # other.
+  #
+  # So by using a new type, I ensure that calling list functions on a hash table
+  # throws an error, and calling hash table functions on a list throws an error.
+  #
+  # In addition, this allows me to safely extend Hash without mucking up
+  # Object.prototype. Though... that's actually a moot point, since extending Any
+  # already mucks up Object.prototype. Oh well.
+  #
+  # TODO how much slower is this than using plain JS objects ?
+  # TODO open problem: should {} expand to (new Hash) ? Obviously yes, but how much slower is it ?
+  (type Hash)
+
+  (generic keys -> (isa Hash x)
+    (external/keys x))
+
+  (generic has? -> (isa Hash x) key
+    (external/has? x key))
+
+  (generic get -> (isa Hash x) key (opt f)
+    (if (has? x key)
+          (external/get x key)
+        # TODO can we handle optional args better ?
+        (void? f)
+          (error "the key @key is not in the hash table")
+        (f)))
+
+  # TODO what about saying (<= (get hash key) value) ?
+  (generic set -> (isa Hash x) key value
+    (do (<= (external/get x key) value)
+        x))
+
+  # A bit faster than using the default len, though still O(n) time
+  (extend len -> (isa Hash x)
+    (len (keys x)))
+
+  (extend empty -> (isa Hash x)
+    {})
+
+  (extend push -> (isa Hash x) [key value]
+    (set x key value))
+
+  # TODO this isn't lazy, but the only way to make it lazy is to use ES6 generators...
+  (extend traverse -> (isa Hash x)
+    (traverse (map (keys x) -> key [key (get x key)])))
+
+
+
+  # Hypothetical cons implementation. I don't plan to actually use this, but
+  # it does demonstrate the distinct similarities between Step/Done and Cons/Nil
+  #
+  # It's also a decent demonstration of how easy it is to define new data types in Nulan.
+  #
+  # Note that cons cells extend some stuff that Step/Done don't, because they need to
+  # be usable in things like map/keep/foldl/etc
+  #
+  (type Nil @Done)
+  (type Cons @Step)
+
+  # nil is a singleton value used to represent the empty list
+  (var nil = (new Nil))
+
+  (extend empty -> (isa Cons x)
+    nil)
+
+  # TODO should maybe return x instead ?
+  # TODO maybe it should be an error to call empty on nil ?
+  (extend empty -> (isa Nil x)
+    nil)
+
+  # TODO I don't think this is correct... the list will be in reverse order!
+  (extend push -> (isa Cons x) y
+    (cons y x))
+
+  # It would be trivial to make cons lazy like Step, but I decided to go for a normal strict version
+  (def cons -> x y
+    (new Cons x y))
+
+  # Other types may want to use car/cdr too, so they're generic rather than normal functions
+  (generic car -> (isa Cons x)
+    x.value)
+
+  (generic cdr -> (isa Cons x)
+    x.next)
+
+  # Names shamelessly taken from Arc
+  # Fun fact: with Nulan's type dispatch system, trying to call
+  #           scar/scdr on nil is automatically a type error!
+  # TODO (<= (car x) value) should work
+  # TODO (<= (cdr x) value) should work
+  (generic scar -> (isa Cons x) v
+    (<= x.value v))
+
+  (generic scdr -> (isa Cons x) v
+    (<= x.next v))
+
+  # This is the same behavior as Common Lisp and Arc: calling car/cdr on nil returns nil
+  # You can remove these to get the Scheme behavior where calling car/cdr on nil throws an error
+  (extend car -> (isa Nil x)
+    x)
+
+  (extend cdr -> (isa Nil x)
+    x)
+
+  # Make it work as a traversable, so all the list goodies automatically work on it
+  (extend next -> (isa Cons x)
+    (cdr x))
+
+  (extend traverse -> (isa Cons x)
+    x)
+
+
+
   # TODO this macro doesn't work due to duplicate variables being invalid in Nulan
   ($mac >> -> x @args
     (w/sym %
@@ -484,6 +500,7 @@ Anyways, onto the code!
 
   ($mac ++ -> x
     `(<= x (+ x 1)))
+
 
 
   # Uses native JavaScript arrays for Raah Speehd!!!1!
