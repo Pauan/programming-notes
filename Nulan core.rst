@@ -186,14 +186,26 @@ Anyways, onto the code!
                   (concat out files2))
                 (error "expected file or directory"))))))))
 
-  # TODO not a correct implementation
-  (def async/fn -> f
+  # TODO should verify that its argument is a generator...?
+  (def async/fn1 -> f
     (-> @args
-      (delay -> done error
-        (let x = (f @args)
-          (wait x -> v
-            (done v))
-          ))))
+      # TODO use normal new or external/new
+      (external/new (external/sym Promise) -> done error
+        # TODO if (f @args) throws, shouldn't it be thrown right away, rather than rejecting the promise ?
+        (external/try-catch
+          (let gen = (f @args)
+            (loop x = (gen.next)
+              (if x.done
+                (done x.value)
+                (x.value.then
+                  (-> v (recur (gen.next v)))
+                  # TODO does this need to call recur ?
+                  (-> e (recur (gen.throw e)))))))
+          (-> e
+            (error e))))))
+
+  ($mac async/fn -> f
+    `(async/fn1 (external/generator f)))
 
   ($mac async -> body
     `((async/fn -> body)))
@@ -201,18 +213,15 @@ Anyways, onto the code!
   ($mac async/def -> name fn
     `(def name (async/fn fn)))
 
-  # !!! EXPERIMENTAL !!!
-  # Uses ES6 generators so you can write code that truly looks synchronous,
-  # but is still async under the hood
-  #
   # TODO test the performance of generators + promises
   (async/def get-all-files -> path
-    (foldl ~(get-files s) [] -> out x
-      (if ~(file? x)
-             (push out x)
-          ~(dir? x)
-             (concat out ~(get-all-files x))
-           (error "expected file or directory"))))
+    (let files = ~(get-files s)
+      (foldl files (empty files) -> out x
+        (if ~(file? x)
+               (push out x)
+            ~(dir? x)
+               (concat out ~(get-all-files x))
+             (error "expected file or directory")))))
 
 
   # Functional iterators
@@ -265,24 +274,20 @@ Anyways, onto the code!
   (generic empty)  # should return an empty version of the list
   (generic push)   # should add a new item to the list and return the list
 
-  # If you extend traverse you get len for free, but some lists have a faster
-  # (usually constant time) length function, which is why you can extend len
-  (generic len -> x
-    # Call recur inside loop to recurse
-    (loop y = (traverse x)
-          i = 0
-      (if (done? y)
-        i
-        (recur (next y)
-               (+ i 1)))))
-
   (def foldl -> x init f
+    # Call recur inside loop to recurse
     (loop v = init
           t = (traverse x)
       (if (done? t)
         v
         (recur (f v (value t))
                (next t)))))
+
+  # If you extend traverse you get len for free, but some lists have a faster
+  # (usually constant time) length function, which is why you can extend len
+  (generic len -> x
+    (foldl x 0 -> sum _
+      (+ sum 1)))
 
   # The functions with the wait/ prefix are the same as the unprefixed versions, except they
   # wait for the lists' elements before proceeding, so they maintain the order of the list
