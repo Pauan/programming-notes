@@ -25,41 +25,61 @@ Anyways, onto the code!
 
 ::
 
-  # Reuse JavaScript's Object constructor for speed
-  # TODO is this any faster than creating a new type ?
-  (external/type Any = Object)
+  # These are built-in types that delegate to the host's implementation of numbers/booleans/etc.
+  # They're only included here for demonstration purposes: it's not possible to actually implement them in Nulan
+  # TODO should this inherit from Any ? probably not
+  # TODO should it be allowed to extend with this type ? probably not
+  (type External)
 
-  # everything implicitly inherits from Any
-  # TODO check if having types actually inherit from Type is slow
-  # TODO types should inherit from Type, but Type should inherit from Any, which is also a type...
-  #      not sure how I'm going to handle this circularity
-  (type Type)
+  # TODO should check typeof boolean ?
+  (type External/Boolean @External)
 
-  # TODO can't use because although JavaScript allows any function to be a constructor,
-  # I want Nulan to be a bit more restrictive
-  #(external/type Type = Function)
-
-  # TODO how fast is using splice with external/new ?
-  # TODO does using splice with external/new cause problems with optimizations in V8 ?
-  # TODO does making new into a function rather than a macro cause various optimization issues in V8 ?
-  # TODO this dispatches and checks that the first arg is a Type, so it has a teensy bit of extra
-  #      overhead compared to a plain old function, which is potentially problematic since new is
-  #      called anytime you create any Nulan object (but not literals like [] and {})
-  # TODO this isn't called when using literals like [] and {} ?
-  (generic new -> (isa Type x) @args
-    (external/new x @args))
+  # TODO should check typeof number ?
+  (type External/Number @External)
 
 
-  # TODO how to implement primitive types (null, numbers, strings) efficiently ?
-  #(type Void)
+  # everything (except External stuff) automatically inherits from Any
+  # TODO it makes logical sense for this to inherit from External, but it may be better to have it not inherit...
+  (type Any @External)
 
-  #(generic void? -> (isa Void x)
-  #  true)
+  # Mutable dictionary/hash table
+  (type HashTable)
 
-  (external/type Error = Error message)
+  # Uses the host's implementation of numbers
+  # Since JavaScript has only 64-bit floating points, that's what Nulan uses too
+  (type Number { value = External/Number })
 
-  (def error -> x
-    (external/throw (new Error x)))
+  # Booleans are true or false
+  (type Boolean { value = External/Boolean })
+
+  # Unlike JavaScript strings, a Character is a proper Unicode code point
+  (type Character { codepoint = Number })
+
+  # Mutable resizable vectors that can contain anything
+  (type Array { length = Number })
+
+  # Strings are a subset of arrays that can only contain Characters
+  (type String @Array)
+
+  # Void basically means "lack of meaningful value"
+  (type Void)
+
+  (type Error { message = String })
+
+
+  (extend empty -> (String)
+    (String { length = 0 }))
+
+  (def void ->
+    (Void))
+
+  (generic void? -> (Void)
+    true)
+
+  (def error -> message
+    (let o = (Error { message })
+      (do ((external Error).captureStackTrace o error)
+          (external/throw o))))
 
 
 
@@ -189,7 +209,7 @@ Anyways, onto the code!
   # TODO should verify that its argument is a generator...?
   (def async/fn1 -> f
     (-> @args
-      # TODO use normal new or external/new
+      # TODO use normal new or external/new ?
       (external/new (external/sym Promise) -> done error
         # TODO if (f @args) throws, shouldn't it be thrown right away, rather than rejecting the promise ?
         (external/try-catch
@@ -214,6 +234,7 @@ Anyways, onto the code!
     `(def name (async/fn fn)))
 
   # TODO test the performance of generators + promises
+  # TODO this doesn't actually work, because you can't use yield in a nested function
   (async/def get-all-files -> path
     (let files = ~(get-files s)
       (foldl files (empty files) -> out x
@@ -222,6 +243,83 @@ Anyways, onto the code!
             ~(dir? x)
                (concat out ~(get-all-files x))
              (error "expected file or directory")))))
+
+
+
+  (var [a b c @d] = [1 2 3 4 5 6])
+
+  (do (var u1 = [1 2 3 4 5 6])
+      (var u2 = (traverse u1))
+      (if (done? u2)
+        (error "expected at least 3 elements but got 1"))
+      (var a = (value u2))
+      (var u3 = (next u2))
+      (if (done? u3)
+        (error "expected at least 3 elements but got 2"))
+      (var b = (value u3))
+      (var u4 = (next u3))
+      (if (done? u4)
+        (error "expected at least 3 elements but got 3"))
+      (var c = (value u4))
+      (var u5 = (next u4))
+      (var d = (into (empty u1) u5))) # TODO into isn't quite the right function for this
+
+  (def ->array -> x
+    (if (external/array? x)
+      x
+      (into [] x)))
+
+  (def into-array -> x y
+    (if (external/array? x)
+      y
+      (into (empty x) y)))
+
+  (def expect-length -> x min rest
+    (let l = x.length
+      (if (< l min)
+        (if rest
+          (error "expected at least @min elements but got @l")
+          (error "expected exactly @min elements but got @l")))))
+
+  # TODO not correct
+  (def destructure-array -> x min rest
+    (loop t = (traverse x)
+          i = 0
+          r = []
+      (if (done? t)
+            (if (< i min)
+              (if rest
+                (error "expected at least @min elements but got @i")
+                (error "expected exactly @min elements but got @i"))
+              r)
+          (and (not rest)
+               (> i min))
+            (error "expected exactly @min elements but got @i")
+          (recur (next t)
+                 (+ i 1)
+                 (push r (value t))))))
+
+
+  (var [a b c @d] = [1 2 3 4 5 6])
+
+  var u1 = [1, 2, 3, 4, 5, 6]
+  var u2 = toArray(u1)
+  expectLength(u2, 3, true)
+  var [a, b, c, ...u3] = u2
+  var d = intoArray(u1, u3)
+  
+  var [a, b, c, d] = destructureArray([1, 2, 3, 4, 5, 6], 3, true)
+
+
+  (var [a b c @d e] = [1 2 3 4 5 6])
+
+  var u1 = [1, 2, 3, 4, 5, 6]
+  var u2 = toArray(u1)
+  expectLength(u2.length, 4, true)
+  var [a, b, c, ...u3] = u2
+  var d = intoArray(u1, u3.slice(0, -1))
+  var e = u3[u3.length - 1]
+
 
 
   # Functional iterators
@@ -244,22 +342,38 @@ Anyways, onto the code!
   #
   (type Done)
 
-  (type Step value next)
+  (type Step { value = Any
+               next  = Function })
 
-  (generic done? -> (isa Done x)
+  (type Step Done)
+
+  (generic done? -> (Done)
     true)
 
   (def step -> value next
-    (new Step value next))
+    (Step { value next }))
 
   (def done ->
-    (new Done))
+    (Done))
 
-  (generic next -> (isa Step x)
+  (type Type { parent     = Type
+               properties = Hash })
+
+  (Step (Step { value = 1 next = 2 }))
+
+  (generic next -> (Step { next })
+    (next))
+
+  (generic value -> (Step { value })
+    value)
+
+
+  (generic next -> (Step x)
     (x.next))
 
-  (generic value -> (isa Step x)
+  (generic value -> (Step x)
     x.value)
+
 
   (generic traverse)
 
@@ -379,14 +493,19 @@ Anyways, onto the code!
     (map (zip @a) -> x
       (f @x)))
 
-  # TODO should be generic so it works on non-traversable things too
-  (def copy -> x
-    (foldl x (empty x) -> out in
+  # Takes the elements of the second list and pushes them into the first list
+  (def into -> x y
+    (foldl y x -> out in
       (push out in)))
+
+  # This is generic so that it can work on non-traversable things, and also so it can
+  # be more efficient if called on an immutable list
+  (generic copy -> x
+    (into (empty x) x))
 
   # TODO implement wait/concat as well ?
   (def concat -> x @args
-    # TODO copy is only needed because arrays are mutable
+    # copy is needed because arrays are mutable
     (foldl args (copy x) -> out in
       (foldl in out -> out2 in2
         (push out2 in2))))
@@ -667,3 +786,55 @@ Anyways, onto the code!
                      (get (db/open "user.options") x ->
                        (get defaults x))
                      []))))
+
+
+
+  ($def pattern-array-required -> a
+    (keep a -> x (not (matches? x `@_))))
+
+  ($generic pattern-sort -> x y
+        # deep equality
+    (if (pattern/is x y)
+      "same"
+      "disjoint"))
+
+  ($extend pattern-sort -> `[@args1] `[@args2]
+    (if (is (len (pattern-array-required args1))
+            (len (pattern-array-required args2)))
+      (let len1 = (len args1)
+           len2 = (len args2)
+        (if (is len1 len2)
+              "same"
+            (< len1 len2)
+              "subset"
+            "superset"))
+      "disjoint"))
+
+  ($extend pattern-sort -> `(opt _ _) `(opt _ _)
+    "same")
+
+  ($extend pattern-sort -> _ `(opt _ _)
+    "subset")
+
+  ($extend pattern-sort -> `(opt _ _) _
+    "superset")
+
+
+  (def foo -> x x)
+  (def foo -> (opt x 5) x)
+
+
+  (def isa -> x type
+    (external/instanceof x type))
+
+  ($extend pattern-sort -> `(isa x1 type1) `(isa x2 type2)
+    (if (is x1.prototype x2.prototype)
+          "same"
+        (isa x1.prototype x2)
+          "subset"
+        (isa x2.prototype x1)
+          "superset"
+        "disjoint"))
+
+  (def foo -> (isa x Foo)
+    ...)
