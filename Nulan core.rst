@@ -25,38 +25,482 @@ Anyways, onto the code!
 
 ::
 
-  # These are built-in types that delegate to the host's implementation of numbers/booleans/etc.
-  # They're only included here for demonstration purposes: it's not possible to actually implement them in Nulan
-  # TODO should this inherit from Any ? probably not
-  # TODO should it be allowed to extend with this type ? probably not
-  (type External)
-
-  # TODO should check typeof boolean ?
-  (type External/Boolean @External)
-
-  # TODO should check typeof number ?
-  (type External/Number @External)
+  # Magical built-in type
+  (type Lazy (matches Function))
 
 
-  # everything (except External stuff) automatically inherits from Any
-  # TODO it makes logical sense for this to inherit from External, but it may be better to have it not inherit...
-  (type Any @External)
+  # Everything is implicitly a subset of Any
+  (type Any -> _
+    true)
+
+  # Using JavaScript's implementation of stuff
+  (type Function -> x
+    (is (external/typeof x) "function"))
+
+  (type Boolean -> x
+    (is (external/class x) "[object Boolean]"))
+
+  (type Number -> x
+    (is (external/class x) "[object Number]"))
+
+  (type Array -> x
+    (is (external/class x) "[object Array]"))
+
+  (type String -> x
+    (is (external/class x) "[object String]"))
+
+  (type Hash-Table -> x
+    (is (external/class x) "[object Object]"))
+
+  (type Void -> x
+    (is (external/class x) "[object Undefined]"))
+
+
+  # Numeric types
+  (type Negative -> (isa Number x)
+    (< x 0))
+
+  (type Positive -> (isa Number x)
+    (>is x 0))
+
+  (type Integer -> (isa Number x)
+    ((external Number).isInteger x))
+
+  (type Percent -> (isa Positive x)
+    (<is x 100))
+
+  (type Degree -> (isa Positive x)
+    (< x 360))
+
+
+  (def void ->
+    (isa Void (external/void 0)))
+
+  (def void? -> x
+    (isa? Void x))
+
+
+  function Wrapper(types, value) {
+    this.types = types
+    this.value = value
+  }
+
+  function check(types, x) {
+    types.forEach(function (f) {
+      if (!f.__predicate__(x)) {
+        throw new TypeError("contract failed")
+      }
+    })
+  }
+  
+  function dedupe() {
+    var a = []
+    for (var i = 0; i < arguments.length; ++i) {
+      arguments[i].forEach(function (x) {
+        if (a.indexOf(x) === -1) {
+          a.push(x)
+        }
+      })
+    }
+    return a
+  }
+
+  function Type(types, predicate) {
+    function f(x) {
+      if (x instanceof Wrapper) {
+        check(f.__types__, x.value)
+        return new Wrapper(dedupe(x.types, f.__types__), x.value)
+      } else {
+        check(f.__types__, x)
+        return new Wrapper(f.__types__, x)
+      }
+    }
+    f.__predicate__ = predicate
+    f.__types__ = types.reduce(function (x, y) {
+      return dedupe(x, y.__types__)
+    }, [f])
+    return f
+  }
+  
+  function coerce(f, x) {
+    if (x instanceof Wrapper) {
+      check(f.__types__, x.value)
+      return new Wrapper(f.__types__, x.value)
+    } else {
+      check(f.__types__, x)
+      return new Wrapper(f.__types__, x)
+    }
+  }
+  
+  var Number = Type([], function (x) {
+    return typeof x === "number"
+  })
+  
+  var Positive = Type([Number], function (x) {
+    return x > 0
+  })
+  
+  var Integer = Type([Number], function (x) {
+    return Math.round(x) === x
+  })
+  
+  var PositiveInteger = Type([Positive, Integer], function (x) {
+    return true
+  })
+  
+  Positive(Integer(5))
+  Integer(Positive(5))
+  PositiveInteger(5)
+  coerce(Number, PositiveInteger(5))
+
+
+  if (match(predicate) && supersets.every(match)) {
+    ...
+  } else if (subsets.some(match)) {
+    throw new Error("is not a superset")
+  } else {
+    throw new Error("did not match")
+  }
+
+
+  (Positive (Integer 5))
+  (coerce Positive (Integer 5))
+
+
+  (type Foo (superset String Number Function) (subset Bar) -> x
+    false)
+
+  (type String (subset Foo) ->
+    ...)
+
+
+  (type Foo [Number Number])
+
+  (def foo -> (Foo [a b])
+    (+ a b))
+
+  (foo (Foo [1 2]))
+
+
+  (type Ellipse width height)
+
+  (type Ellipse { width height })
+
+  (type Ellipse { (Positive (Integer width))
+                  (Positive (Integer height)) })
+
+  (type Ellipse
+    (Positive (Number width))
+    (Positive (Number height)))
+
+  (type Ellipse :dict
+    (Positive:Number width)
+    (Positive:Number height))
+
+  (type Ellipse *
+    (Positive:Number width)
+    (Positive:Number height))
+
+  (type Ellipse
+    :dict (Positive:Number width)
+          (Positive:Number height))
+
+  (type Ellipse
+    (dict (Positive (Number width))
+          (Positive (Number height))))
+
+  (type Ellipse
+    @(Positive (Number width))
+    @(Positive (Number height)))
+
+  (type Ellipse {
+    (Positive (Number width))
+    (Positive (Number height))
+  })
+
+  (type Ellipse {
+    (Positive (Number width))
+    (Positive (Number height)) })
+
+  (type Ellipse
+    { (Positive (Number width))
+      (Positive (Number height)) })
+
+  (type Ellipse
+    { width  = (Positive Number)
+      height = (Positive Number) })
+
+  (type Ellipse
+    { width  = (^ Positive Number)
+      height = (^ Positive Number) })
+
+  (type Ellipse
+    { width  = (and Positive Number)
+      height = (and Positive Number) })
+
+  (type Ellipse
+    { width  = (new Number (matches Positive))
+      height = (new Number (matches Positive)) })
+
+  (type Ellipse
+    { (isa width Positive Number)
+      (isa height Positive Number) })
+
+  (type Ellipse
+    { (isa Positive Number width)
+      (isa Positive Number height) })
+
+  (type Ellipse
+    (isa Positive Number width)
+    (isa Positive Number height))
+
+  (type Ellipse ->
+    { width  = (isa _ Positive Number)
+      height = (isa _ Positive Number) }
+    true)
+
+  (type Ellipse
+    { width  = (isa Positive Number)
+      height = (isa Positive Number) })
+
+  (type Ellipse
+    { width  = (subset Positive Number)
+      height = (subset Positive Number) })
+
+  (type Ellipse
+    { width  = (intersect Positive Number)
+      height = (intersect Positive Number) })
+
+  (type Ellipse
+    { width  = (Positive (Number _))
+      height = (Positive (Number _)) })
+
+  (type Ellipse
+    { width  = Positive:Number
+      height = Positive:Number })
+
+  (def foo -> (Positive:Number x)
+    ...)
+
+  (w/dict
+    (var width = 5)
+    (var height = 10))
+
+  (dict width  = 5
+        height = 10)
+
+  (type Ellipse -> x
+    (and (object? x)
+         (matches? x.width  Number)
+         (matches? x.height Number)))
+
+  (type Ellipse -> x
+    (matches? x { width  = Number
+                  height = Number }))
+
+
+  (type Ellipse
+    { width  = (isa Positive)
+      height = (isa Positive) })
+
+  (type Circle -> (isa Ellipse { width height })
+    (is width height))
+
+
+  (extend empty -> (isa String x)
+    (new x ""))
+
+  (extend push -> (isa String x) (isa String y)
+    (new x (external/+ (external/unwrap x) (external/unwrap y))))
+
+  (extend traverse -> (isa String x)
+    (traverse (isa Array x)))
+
+
+  (Ellipse { width height })
+
+  (Ellipse * width height)
+  
+  (Ellipse * width = 1 height = 2)
+
+  { width = 1 height = 2 }
+
+  (Ellipse:dict width height)
+
+  (Ellipse:dict width  = 5
+                height = 10)
+
+  (Ellipse { width = 5 height = 10 })
+
+  (Circle { width = 5 height = 5 })
+
+  (Circle (Ellipse { width = 5 height = 5 }))
+
+
+  (type PositiveInteger (subset Positive Integer))
+
+
+  (Positive (Integer 5))
+  (Integer (Positive 5))
+  
+        Number
+       /      \
+  Positive  Integer
+       \      /
+    PositiveInteger
+
+
+  (type Hsla
+    { hue        = (matches Degree)
+      saturation = (matches Percent)
+      lightness  = (matches Percent)
+      alpha      = (matches Percent) })
+
+  (def hsl -> hue saturation lightness (opt alpha = 100)
+    (new Hsla { hue saturation lightness alpha }))
+
+  (generic ->css -> (new Hsla { hue saturation lightness alpha })
+    "hsla(@{hue}, @{saturation}%, @{lightness}%, @{/ alpha 100})")
+
+
+  (type Beak
+    { length = (Positive Number) })
+
+  (type Bird
+    { beak = Beak })
+
+  (type Bird
+    { wings = { length = positive-number? }
+      beak  = { length = positive-number? }
+      legs  = { length = positive-number? }
+      eyes  = { color = hsla? } })
+
+  (type Sparrow (subset Bird)
+    { wings = { length = 50 }
+      eyes  = { color = (hsla 50 50 50 100) } })
+
+
+
+  (type Event
+    { listeners = Array })
+
+  (type Signal (inherit Event)
+    { value = Any })
+
+  (def signal -> value
+    (Signal { value listeners = [] }))
+
+
+
+  (type event?
+    { listeners = array? })
+
+  (type signal? (inherit event?)
+    { value = any? })
+
+  (def signal -> value
+    { value listeners = [] })
+
+
+
+  (new ellipse? { width  = 5
+                  height = 10 })
+
+
+  (type Meter { value })
+  
+  (def meter -> value
+    (new Meter { value }))
+
+
+  (type meter?
+    { unit  = (is unit "meter")
+      value = (number? value) })
+
+  { value = value }
+
+  { (number? value) = (number? value) }
+
+  (def meter -> value
+    (new meter? { value }))
+
+
+
+  (type void -> x
+    (empty x))
+
+  (type kilometer?
+    { unit  = "kilometer"
+      value = number? })
+
+  (type ellipse?
+    { width  = positive-number?
+      height = positive-number? })
+
+  (type circle? (subset ellipse?) -> { width height }
+    (is width height))
+
+
+  (type car? (superset vehicle?) -> x
+    (matches x { width  = number?
+                 height = number? }))
+
+  (type ellipse? (extends circle?)
+    { width  = number?
+      height = number? })
+
+  (type vehicle?)
+
+  (type car? (extends vehicle?)
+    { price wheel body doors axel })
+
+  (contract expensive-car? (sub car?) -> { price }
+    (> price 50000))
+
+  (contract circle? (restricts ellipse?) -> { width height }
+    (is width height))
+
+  (contract <is -> x y
+    (<is x y))
+
+  (contract >is -> x y
+    (>is x y))
+
+  (contract is @<is @>is -> x y
+    (is x y))
+
+  (contract >length? @>is @Array -> x y
+    (>is x.length y))
+
+  (contract length? @>length? -> x y
+    (is x.length y))
+
+  (match x
+    [a b c]       => [c b a]
+    (positive? a) => a
+    1             => 2
+    5             => 6)
+
+  (length? [a b c] 3)
+  (>length? [a b c] 3)
+
+  (is u.length 3)
+  (>is u.length 3)
 
   # Mutable dictionary/hash table
-  (type HashTable)
+  (type Hash-Table)
 
-  # Uses the host's implementation of numbers
-  # Since JavaScript has only 64-bit floating points, that's what Nulan uses too
-  (type Number { value = External/Number })
+  (matches Integer x y)
 
-  # Booleans are true or false
-  (type Boolean { value = External/Boolean })
+  (new Hash-Table)
+
+  (new Array { length = 0 })
 
   # Unlike JavaScript strings, a Character is a proper Unicode code point
-  (type Character { codepoint = Number })
+  (type Character { codepoint = positive-integer? })
 
   # Mutable resizable vectors that can contain anything
-  (type Array { length = Number })
+  (type Array { length = positive-integer? })
 
   # Strings are a subset of arrays that can only contain Characters
   (type String @Array)
@@ -67,186 +511,33 @@ Anyways, onto the code!
   (type Error { message = String })
 
 
+  (var true  = (Boolean { value = (external true) })
+       false = (Boolean { value = (external false) }))
+
   (extend empty -> (String)
     (String { length = 0 }))
 
   (def void ->
     (Void))
 
-  (generic void? -> (Void)
-    true)
+  # TODO should this be generic ?
+  (def void? -> x
+    (or (external/null? x)
+        (isa? x Void)))
 
   (def error -> message
-    (let o = (Error { message })
-      (do ((external Error).captureStackTrace o error)
-          (external/throw o))))
-
-
-
-  # This is all basically Promise stuff, but I prefer the name Delay rather than
-  # Promise.
-  #
-  # Delays/Promises/Futures/whatever you want to call them provide an interesting
-  # way of explicitly dealing with asynchronous stuff in your program.
-  #
-  # The basic idea is, if you gotta do something asynchronous, like read a file or
-  # whatever, normally you would have a callback function that is called when the
-  # operation is completed.
-  #
-  # Instead, it's a lot nicer if you return a Delay, which is an object that
-  # represents a value that isn't ready right now, but will be ready in the future.
-  #
-  # You can then call wait on the Delay, which will return a new Delay that
-  # calls the function when the input Delay is complete:
-  #
-  #   # wait until the read-file function completes, then do stuff with the file
-  #   (wait (read-file "foo") -> file
-  #     ...)
-  #
-  # Wait a sec, how is this any better than passing a callback argument to the
-  # read-file function? Well, honestly, it isn't. But! We can do other nifty
-  # things with Delay that you can't do with callbacks.
-  #
-  # For instance, since Delays are first class values, you can store them in
-  # variables or map over them:
-  #
-  #   (var files = (map ["foo" "bar" "qux"] read-file))
-  #
-  # The above will read the files "foo", "bar", and "qux" *in parallel*. To get
-  # the completed values, you can use wait/each, wait/map, wait/keep, or
-  # wait/fold:
-  #
-  #   # do something for each file
-  #   (wait/each files -> file
-  #     ...)
-  #
-  # The various wait/ functions work incrementally: they don't wait for all the
-  # Delays to complete. But they still maintain the order of the list.
-  #
-  # Trying to do all that with standard Node.js callbacks is a huuuuuuuuuge pain
-  # in the butt, which is why you have libraries like Async.js
-  #
-  # So, Delays let you write async code which is simple and clear and powerful...
-  # *without* needing to use callbacks or Async.js
-  #
-  # Oh yeah, and there's a >> macro which makes it easy to chain Delays:
-  #
-  #   # read the file "foo"
-  #   # then convert it to JSON
-  #   # then map over the JSON, reading a file for each element in the JSON array
-  #   (>> (read-file "foo")
-  #       (->json %)
-  #       (map % read-file))
-  #
-  # Inside the >> macro, you can use % to refer to the value of the previous Delay
-  # in the chain.
-  #
-  # Despite all that, I'm not a fan of Delays, because certain async things are
-  # still clunky to write with Delays. But they are now built-in to ECMAScript 6,
-  # and various JavaScript APIs (including built-ins!) will be returning
-  # promises in the near future, so Nulan has to cope with that.
-  #
-  # TODO built-in Promises don't have an initializer property
-  (external/type Delay = Promise initializer)
-
-  # Waits for a delayed value to complete, then calls the function
-  # If the function returns a delayed value, it will wait for that to finish before completing
-  # Returns a new delayed value, so it is composable
-  (generic wait -> (isa Delay x) f
-    (x.then f))
-
-  # Lets you convert an asynchronous thing into a Delay, like so:
-  #
-  #   (def delay/for -> x i
-  #     (delay -> done error
-  #       (setTimeout (-> (done x)) i)))
-  #
-  #   (def timeout -> i
-  #     (delay -> done error
-  #       (setTimeout (-> (error "timeout")) i)))
-  #
-  #   # Returns a delayed value which will be 5 after 1000 milliseconds
-  #   (delay/for 5 1000)
-  #
-  #   # Returns a delayed value which will throw an error after 1000 milliseconds
-  #   # Useful if you want to abort an asynchonous call after a set amount of time
-  #   (timeout 1000)
-  #
-  (def delay -> f
-    (new Delay -> done error
-      (f done (-> x (error (new Error x))))))
-
-  # If the value is already a Delay, it returns it as-is
-  # Otherwise, it delays the value for essentially 0ms
-  # Useful if you want to pass a value to wait
-  # TODO shouldn't this be generic ?
-  (def delay/value -> x
-    (Delay.resolve x))
-
-  # Shows how to wrap a Node.js function to return a Delay
-  # TODO should use Promise.promisify or something instead ?
-  (def read-file -> path
-    (delay -> done error
-      ((require "fs").readFile path { encoding = "utf8" } -> err file
-        (if err
-          (error err)
-          (done file)))))
-
-  # This is an example of an asynchronous algorithm that's sucky even with Delay
-  (def get-all-files -> path
-    (wait (get-files s) -> files
-      (foldl files [] -> out x
-        # TODO does this cause the list to be out of order ?
-        (wait (file? x) -> f?
-          (if f?
-            (push out x)
-            (wait (dir? x) -> d?
-              (if d?
-                (wait (get-all-files x) -> files2
-                  (concat out files2))
-                (error "expected file or directory"))))))))
-
-  # TODO should verify that its argument is a generator...?
-  (def async/fn1 -> f
-    (-> @args
-      # TODO use normal new or external/new ?
-      (external/new (external/sym Promise) -> done error
-        # TODO if (f @args) throws, shouldn't it be thrown right away, rather than rejecting the promise ?
-        (external/try-catch
-          (let gen = (f @args)
-            (loop x = (gen.next)
-              (if x.done
-                (done x.value)
-                (x.value.then
-                  (-> v (recur (gen.next v)))
-                  # TODO does this need to call recur ?
-                  (-> e (recur (gen.throw e)))))))
-          (-> e
-            (error e))))))
-
-  ($mac async/fn -> f
-    `(async/fn1 (external/generator f)))
-
-  ($mac async -> body
-    `((async/fn -> body)))
-
-  ($mac async/def -> name fn
-    `(def name (async/fn fn)))
-
-  # TODO test the performance of generators + promises
-  # TODO this doesn't actually work, because you can't use yield in a nested function
-  (async/def get-all-files -> path
-    (let files = ~(get-files s)
-      (foldl files (empty files) -> out x
-        (if ~(file? x)
-               (push out x)
-            ~(dir? x)
-               (concat out ~(get-all-files x))
-             (error "expected file or directory")))))
-
+    (let e = (Error { message })
+      (do ((external Error).captureStackTrace e error)
+          (external/throw e))))
 
 
   (var [a b c @d] = [1 2 3 4 5 6])
+
+  (var u = [1 2 3 4 5 6]
+       a = (nth u 0)
+       b = (nth u 1)
+       c = (nth u 2)
+       d = (slice u 3))
 
   (do (var u1 = [1 2 3 4 5 6])
       (var u2 = (traverse u1))
