@@ -40,9 +40,9 @@ Nulan, however, takes a different approach to types. In Nulan, a type is more li
 
 What the above means is... ``Positive`` is a ``Number`` that is greater than ``0``. So, obviously the ``type`` macro creates new types, but what does that ``isa`` thing mean?
 
-Well, ``Number`` is a built in type that returns true if its argument is a 64-bit floating point JavaScript number. Within a type declaration, ``isa`` basically creates a subset relationship: we're saying that ``Positive`` is a subset of ``Number``. That means any time we need a Number, we can use a Positive as well.
+Well, ``Number`` is a built-in type that returns true if its argument is a 64-bit floating point JavaScript number. Within a type declaration, ``isa`` basically creates a subset relationship: we're saying that ``Positive`` is a subset of ``Number``. That means anywhere we can use a ``Number``, we can use a ``Positive`` as well.
 
-To look at it another way, it just means that something belongs to the ``Positive`` type if and only if *both* the ``Number`` type and ``Positive`` type return true. If either returns false, then it doesn't belong to the ``Positive`` type. Let's create some more types::
+To look at it another way, it just means that something belongs to the ``Positive`` type if (and only if) *both* the ``Number`` type and ``Positive`` type return true. If either returns false, then it doesn't belong to the ``Positive`` type. Let's create some more types::
 
     (type Integer (isa Number) -> x
       (is (round x) x))
@@ -58,14 +58,14 @@ The ``Integer`` type is pretty self-explanatory, it simply checks that its argum
 
 Rather than being a function, a type can also be a dictionary. So, the ``Ellipse`` type says that **any** dictionary that has a ``width`` and ``height`` property which are both ``Positive`` is an ``Ellipse``. This is like structural typing on records in Standard ML. It's also like duck typing but a bit safer, since it requires the dictionary to have *both* ``width`` and ``height`` properties, *and* for the properties to be ``Positive``.
 
-The ``Circle`` type is pretty standard, it just checks that the ``width`` and ``height`` properties of the Ellipse are the same.
+``Circle`` is a standard type that just checks that the ``width`` and ``height`` properties of the ``Ellipse`` are the same.
 
 So that handles the duck typing/structural typing side of things, but what about nominal typing? Sometimes you really do want two things to be treated as different even if they have the same structure. For that purpose, Nulan lets you use the ``isa`` macro::
 
     (isa Ellipse { width  = 5
                    height = 5 })
 
-What's going on here? Well, first we created the dictionary ``{ width = 5 height = 5 }`` and then we said that the dictionary is-a ``Ellipse``. What that does is it first checks that the dictionary matches the type (that it has width/height properties that are Positive), and then it *wraps* the dictionary in such a way that it is now recognized as an ``Ellipse``.
+What's going on here? Well, first we created the dictionary ``{ width = 5 height = 5 }`` and then we said that the dictionary is-a ``Ellipse``. What that does is it first checks that the dictionary matches the ``Ellipse`` type (it has width/height properties that are Positive), and then it *wraps* the dictionary in such a way that it is now recognized as an ``Ellipse``.
 
 Something that has been wrapped in ``Ellipse`` will only be treated as an ``Ellipse``. The above will never be treated as a ``Circle`` even though the ``Circle`` type matches it. This is nominal typing.
 
