@@ -38,9 +38,9 @@ Nulan, however, takes a different approach to types. In Nulan, a type is more li
     (type Positive (isa Number) -> x
       (> x 0))
 
-What the above means is... ``Positive`` is a ``Number`` that is greater than ``0``. So, obviously the ``type`` macro creates new types, but what does that ``isa`` thing mean?
+What the above means is... ``Positive`` is a ``Number`` that is greater than ``0``. ``Number`` is a built-in type that returns true if its argument is a 64-bit floating point JavaScript number.
 
-Well, ``Number`` is a built-in type that returns true if its argument is a 64-bit floating point JavaScript number. Within a type declaration, ``isa`` basically creates a subset relationship: we're saying that ``Positive`` is a subset of ``Number``. That means anywhere we can use a ``Number``, we can use a ``Positive`` as well.
+So, obviously the ``type`` macro creates new types, but what does that ``isa`` thing mean? Within a type declaration, ``isa`` basically creates a subset relationship: we're saying that ``Positive`` is a subset of ``Number``. That means anywhere we can use a ``Number``, we can use a ``Positive`` as well.
 
 To look at it another way, it just means that something belongs to the ``Positive`` type if (and only if) *both* the ``Number`` type and ``Positive`` type return true. If either returns false, then it doesn't belong to the ``Positive`` type. Let's create some more types::
 
