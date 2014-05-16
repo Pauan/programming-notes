@@ -146,7 +146,7 @@ Notice that even though ``5`` would normally cause ``foo`` to return ``1``, by w
 
 I saved the best for last: there's one more place where we can use types, and it's where all the magic happens. Nulan has *generic functions*, which are sometimes called *multimethods* in other languages. If you don't know what a generic function/multimethod is, it's basically a function that changes its behavior based on the type of its arguments.
 
-But wait, didn't we just do that with pattern matching? Yes, but the cases were fixed: we did one thing with Integers and another thing with Positives. But what if we want to add more cases? We'd have to go in and change the source code. Generic functions let you add more behavior to a function *without changing the source code*.
+But wait, didn't we just do that with pattern matching? Yes, but the cases were fixed: we did one thing with ``Integer`` and another thing with ``Positive``. But what if we want to add more cases? We'd have to go in and change the source code. Generic functions let you add more behavior to a function *without changing the source code*.
 
 How does it work? First, you use the ``generic`` macro to create a generic function::
 
