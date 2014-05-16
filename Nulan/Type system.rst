@@ -172,14 +172,16 @@ Here we created two generic functions called ``sing`` and ``fly``. By default th
     (extend fly -> (isa Sparrow x)
       "flies gracefully!")
 
-Heeey, this is like what we did earlier with Python! It sure is, but rather than using methods, we're using generic functions. This is better because generic functions can work with Nulan's module system: a file input module can define a "read" generic function and a book module can define a "read" generic function, and they won't collide!
+Heeey, this is like what we did earlier with Python! It sure is, but rather than using methods, we're using generic functions. This is better because generic functions can work with Nulan's module system: a file input module can define a ``read`` generic function, a book module can define a ``read`` generic function, and they won't collide!
 
 So, let's try calling the generic functions::
 
-    (sing {})
-    (fly {})
+    (sing {}) # error: multiple matching patterns
+    (fly {})  # error: multiple matching patterns
 
-Oops, we got an error, why? Well, generic functions have certain rules about how they behave. Since any part of your program can change any generic function at any time... you need some rules so you can keep things sane and easy to understand. One of those rules is that you can't have multiple extensions match the same value. When you called the generic functions, both ``Duck`` and ``Sparrow`` matched! Remember, Nulan uses structural typing by default, and both the Duck and Sparrow types are defined as being an empty dictionary, meaning they have the same structure.
+Oops, we got an error, why? Well, generic functions have certain rules about how they behave. Since any part of your program can change any generic function at any time... you need some rules so you can keep things sane and easy to understand.
+
+One of those rules is that you can't have multiple extensions match the same value. When you called the generic functions, both ``Duck`` and ``Sparrow`` matched! Remember, Nulan uses structural typing by default, and both the Duck and Sparrow types are defined as being an empty dictionary, meaning they have the same structure.
 
 To resolve this is easy, you just use ``isa`` to switch to nominal typing::
 
