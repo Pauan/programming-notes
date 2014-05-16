@@ -25,6 +25,23 @@ Anyways, onto the code!
 
 ::
 
+  ($var in)
+
+  ($mac for -> expr `(in name list)
+    `(map list -> name expr))
+
+  ($syntax! in  (right-infix 50))
+  ($syntax! for (right-infix 50))
+
+
+  (for (+ x 2) (in x [1 2 3]))
+
+  (use/syntax { for in } = "path/to/comprehension.nul")
+
+  ((+ x 2) for x in [1 2 3])
+
+
+
   # Magical built-in type
   (type Lazy (matches Function))
 
@@ -74,7 +91,7 @@ Anyways, onto the code!
 
 
   (def void ->
-    (isa Void (external/void 0)))
+    (external/void 0))
 
   (def void? -> x
     (isa? Void x))
