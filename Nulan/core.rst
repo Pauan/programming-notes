@@ -320,6 +320,14 @@ Anyways, onto the code!
     { width  = (isa Positive)
       height = (isa Positive) })
 
+  (type Circle
+    (isa Ellipse { width  = 5
+                   height = 10 }))
+
+  (type Circle (isa Ellipse)
+    { width  = 5
+      height = 10 })
+
   (type Circle -> (isa Ellipse { width height })
     (is width height))
 
