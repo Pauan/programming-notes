@@ -69,7 +69,7 @@ What's going on here? Well, first we created the dictionary ``{ width = 5 height
 
 Something that has been wrapped in ``Ellipse`` will only be treated as an ``Ellipse``. The above will never be treated as a ``Circle`` even though the ``Circle`` type matches it. This is nominal typing.
 
-Let's create a helper function to create Ellipses::
+Let's create a helper function to create ellipses::
 
     (def ellipse -> width height
       (isa Ellipse { width height }))
@@ -118,7 +118,7 @@ Now, how do we actually *use* these types to do things? First off, you can use t
 
 Here we've created a function ``foo`` that requires its first argument to be both ``Positive`` and ``Integer``. It then simply returns its argument unmodified. Notice the syntax is the same as the syntax to wrap something: that's intentional.
 
-If you try to call ``foo`` with an argument that isn't a positive integer, it'll throw an error. This is basically like contract systems found in some languages. You could also consider it as "assert on steroids".
+If you try to call ``foo`` with an argument that isn't a positive integer, it'll throw an error. This is very similar to contracts, which is a feature found in some other languages. You could also consider it as "assert on steroids".
 
 You can also use types for *pattern matching*::
 
@@ -153,7 +153,9 @@ How does it work? First, you use the ``generic`` macro to create a generic funct
     (generic sing)
     (generic fly)
 
-Here we created two generic functions called ``sing`` and ``fly``. By default they don't have any behavior, so if you try to call them you'll always get an error. You can then use the ``extend`` macro to add new behavior::
+Here we created two generic functions called ``sing`` and ``fly``. By default they don't have any behavior, so if you try to call them you'll always get an error.
+
+You can then use the ``extend`` macro to add new behavior::
 
     (type Duck {})
     
@@ -179,16 +181,16 @@ So, let's try calling the generic functions::
     (sing {}) # error: multiple matching patterns
     (fly {})  # error: multiple matching patterns
 
-Oops, we got an error, why? Well, generic functions have certain rules about how they behave. Since any part of your program can change any generic function at any time... you need some rules so you can keep things sane and easy to understand.
+Oops, we got an error. Why? Well, generic functions have certain rules about how they behave. Since any part of your program can change any generic function at any time... you need some rules so you can keep things sane and easy to understand.
 
-One of those rules is that you can't have multiple extensions match the same value. When you called the generic functions, both ``Duck`` and ``Sparrow`` matched! Remember, Nulan uses structural typing by default, and both the ``Duck`` and ``Sparrow`` types are defined as being an empty dictionary, meaning they have the same structure.
+One of those rules is that you can't have multiple extensions match the same value. When you called the generic functions, both ``Duck`` and ``Sparrow`` matched! Remember, Nulan uses structural typing by default, and both the ``Duck`` and ``Sparrow`` types are defined as being an empty dictionary, so they have the same structure.
 
 To resolve this is easy, you just use ``isa`` to switch to nominal typing::
 
     (sing (isa Duck {})) # returns "quack"
     (fly (isa Duck {}))  # returns "flies slowly!"
 
-Unlike nominal typing in Python, this is very flexible! Let's say we had some variable ``foo`` and we didn't know what type it was, we can just use it!
+Unlike nominal typing in Python, this is very flexible! Let's say we had some variable ``foo`` and we didn't know what type it was... we can just use it!
 
 ::
 
