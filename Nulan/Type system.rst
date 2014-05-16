@@ -65,7 +65,7 @@ So that handles the duck typing/structural typing side of things, but what about
     (isa Ellipse { width  = 5
                    height = 5 })
 
-What's going on here? Well, first we created the dictionary ``{ width = 5 height = 5 }`` and then we said that the dictionary is-a ``Ellipse``. What that does is it first checks that the dictionary matches the ``Ellipse`` type (it has width/height properties that are Positive), and then it *wraps* the dictionary in such a way that it is now recognized as an ``Ellipse``.
+What's going on here? Well, first we created the dictionary ``{ width = 5 height = 5 }`` and then we said that the dictionary isa ``Ellipse``. What that does is it first checks that the dictionary matches the ``Ellipse`` type (it has width/height properties that are ``Positive``), and then it *wraps* the dictionary in such a way that it is now recognized as an ``Ellipse``.
 
 Something that has been wrapped in ``Ellipse`` will only be treated as an ``Ellipse``. The above will never be treated as a ``Circle`` even though the ``Circle`` type matches it. This is nominal typing.
 
