@@ -219,7 +219,7 @@ To make things easier, another rule about generic functions is that subtypes alw
 
 Notice that when we used ``5``, both ``Number`` and ``Integer`` matched, but since ``Integer`` is a subset of ``Number``, it was used instead of throwing an error. We can manually override that by using ``isa``.
 
-This can also be used to fulfill the same purpose as ``super`` in Python::
+This can also be used for the same purpose as ``super`` in Python::
 
     (type Foo (isa Number))
 
@@ -264,7 +264,7 @@ The way it works is that every time you wrap something with ``isa``, the compile
 
     (var foo = (isa Number 5))
 
-...then the compiler knows that ``foo`` isa Number. It doesn't know whether ``5`` actually matches the Number type or not (type-checking always happens at run-time), but the compiler can safely *assume* that the Number type matches, because if it didn't... you'd get a run-time error.
+...then the compiler knows that ``foo`` isa ``Number``. It doesn't know whether ``5`` actually matches the ``Number`` type or not (type-checking always happens at run-time), but the compiler can safely *assume* that the ``Number`` type matches, because if it didn't... you'd get a run-time error.
 
 Now if you call a generic function...
 
@@ -272,7 +272,7 @@ Now if you call a generic function...
 
     (some-generic-function foo)
 
-...since the compiler knows that ``foo`` isa Number, it can *do the generic function lookup at compile-time*, making it just as fast as normal function calls. It can also throw an error *at compile-time* if there isn't any matching extension.
+...since the compiler knows that ``foo`` isa ``Number``, it can do the generic function lookup at *compile-time*, making it just as fast as a normal function call. It can also throw an error *at compile-time* if there isn't any matching extension.
 
 Of course this only works if you explicitly tag things with ``isa``, but that's the beauty of this system: if you don't mark things with ``isa``, it just falls back to the slower run-time lookup. So by using ``isa``, you make your program safer and faster, but if you want more flexibility, that's fine too... you'll just pay a price for it. And it's totally fine to mix and match, having parts of your program using ``isa`` and parts not using ``isa``.
 
