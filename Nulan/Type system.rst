@@ -36,9 +36,9 @@ So, nominal typing is safe but inflexible, while structural typing is flexible b
 Nulan, however, takes a different approach to types. In Nulan, a type is more like a mathematical set, and I think it's a good idea to think of Nulan types as behaving like mathematical sets. Basically, a type is a special function that takes a *single argument* and returns true/false depending on whether its argument belongs to the type or not. Here's an example::
 
     (type Positive (isa Number) -> x
-      (>is x 0))
+      (> x 0))
 
-What the above means is... ``Positive`` is a ``Number`` that is greater than or equal to ``0``. We're treating ``0`` as positive, you'll see why later. So, obviously the ``type`` macro creates new types, but what does that ``isa`` thing mean?
+What the above means is... ``Positive`` is a ``Number`` that is greater than ``0``. So, obviously the ``type`` macro creates new types, but what does that ``isa`` thing mean?
 
 Well, ``Number`` is a built in type that returns true if its argument is a 64-bit floating point JavaScript number. Within a type declaration, ``isa`` basically creates a subset relationship: we're saying that ``Positive`` is a subset of ``Number``. That means any time we need a Number, we can use a Positive as well.
 
