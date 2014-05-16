@@ -118,7 +118,7 @@ Now, how do we actually *use* these types to do things? First off, you can use t
 
 Here we've created a function ``foo`` that requires its first argument to be both ``Positive`` and ``Integer``. It then simply returns its argument unmodified. Notice the syntax is the same as the syntax to wrap something: that's intentional.
 
-If you try to call ``foo`` with an argument that isn't a positive integer, it'll throw an error. This is basically like contract systems found in some languages.
+If you try to call ``foo`` with an argument that isn't a positive integer, it'll throw an error. This is basically like contract systems found in some languages. You could also consider it as "assert on steroids".
 
 You can also use types for *pattern matching*::
 
@@ -140,13 +140,13 @@ This also works with type wrapping::
     (foo 5)                        # returns 1
     (foo (isa Integer 5))          # returns 1
     (foo (isa Positive 5))         # returns 2
-    (foo (isa Positive Integer 5)) # error: no matching cases
+    (foo (isa Positive Integer 5)) # returns 1
 
-Notice that even though ``5`` would normally cause ``foo`` to return ``1``, by wrapping it with ``Positive`` we caused it to return ``2``. Also, since we didn't specify a case for the combination of ``Positive`` and ``Integer``, if we wrap it with both, no cases will match.
+Notice that even though ``5`` would normally cause ``foo`` to return ``1``, by wrapping it with ``Positive`` we caused it to return ``2``. It works just fine with multiple types too.
 
 I saved the best for last: there's one more place where we can use types, and it's where all the magic happens. Nulan has *generic functions*, which are sometimes called *multimethods* in other languages. If you don't know what a generic function/multimethod is, it's basically a function that changes its behavior based on the type of its arguments.
 
-But wait, didn't we already do that just a short while ago with pattern matching? Yes, but the cases were fixed: we did one thing with Integers and another thing with Positives. But what if we want to add more cases? We'd have to go in and change the source code. Generic functions let you add more behavior to a function *without changing the source code*.
+But wait, didn't we just do that with pattern matching? Yes, but the cases were fixed: we did one thing with Integers and another thing with Positives. But what if we want to add more cases? We'd have to go in and change the source code. Generic functions let you add more behavior to a function *without changing the source code*.
 
 How does it work? First, you use the ``generic`` macro to create a generic function::
 
