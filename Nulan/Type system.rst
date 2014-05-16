@@ -78,7 +78,16 @@ Now we can create ellipses easily::
 
     (var my-ellipse = (ellipse 5 5))
 
-This is kinda like creating a class in Python: the ``Ellipse`` type defines the structure of the class, the ``ellipse`` function is like the ``__init__`` method in Python, and ``isa`` actually tags the dictionary as belonging to the class. Unlike in Python, you can change the type of something on the fly::
+This is kinda like creating a class in Python: the ``Ellipse`` type defines the structure of the class, the ``ellipse`` function is like the ``__init__`` method in Python, and ``isa`` actually tags the dictionary as belonging to the class::
+
+    class Ellipse(object):
+        def __init__(self, width, height):
+            self.width = width
+            self.height = height
+
+    my_ellipse = Ellipse(5, 5)
+
+Unlike in Python, you can change the type of something on the fly::
 
     (var my-circle = (isa Circle my-ellipse))
 
