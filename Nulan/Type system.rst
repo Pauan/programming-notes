@@ -181,12 +181,12 @@ So, let's try calling the generic functions::
 
 Oops, we got an error, why? Well, generic functions have certain rules about how they behave. Since any part of your program can change any generic function at any time... you need some rules so you can keep things sane and easy to understand.
 
-One of those rules is that you can't have multiple extensions match the same value. When you called the generic functions, both ``Duck`` and ``Sparrow`` matched! Remember, Nulan uses structural typing by default, and both the Duck and Sparrow types are defined as being an empty dictionary, meaning they have the same structure.
+One of those rules is that you can't have multiple extensions match the same value. When you called the generic functions, both ``Duck`` and ``Sparrow`` matched! Remember, Nulan uses structural typing by default, and both the ``Duck`` and ``Sparrow`` types are defined as being an empty dictionary, meaning they have the same structure.
 
 To resolve this is easy, you just use ``isa`` to switch to nominal typing::
 
-    (sing (isa Duck {}))
-    (fly (isa Duck {}))
+    (sing (isa Duck {})) # returns "quack"
+    (fly (isa Duck {}))  # returns "flies slowly!"
 
 Unlike nominal typing in Python, this is very flexible! Let's say we had some variable ``foo`` and we didn't know what type it was, we can just call it!
 
@@ -197,9 +197,9 @@ Unlike nominal typing in Python, this is very flexible! Let's say we had some va
 
 If it doesn't match any of the extensions you'll get an error. If it matches multiple extensions you'll get an error, which you can resolve by using ``isa``. And if only one extension matches, it'll be used.
 
-Basically, you can *just call the generic function* without worrying about the types. This gives the same flexibility as duck typing, but it's **vastly** safer: you're almost guaranteed to get errors if something is wrong.
+Basically, you can *just call the generic function* without worrying about the types. This gives the same flexibility as duck typing, but it's a **lot** safer: you're much more likely to get errors if something is wrong.
 
-To make things easier, another rule about generic functions is that subtypes always have precedence over supertypes. Remember how an Integer is a subtype of Number, because it uses ``(isa Number)`` in the type declaration?
+To make things easier, another rule about generic functions is that subtypes always have precedence over supertypes. Remember how an ``Integer`` is a subtype of ``Number``, because it uses ``(isa Number)`` in the type declaration?
 
 ::
 
@@ -217,7 +217,9 @@ To make things easier, another rule about generic functions is that subtypes alw
     (foo (isa Number 5))  # returns 1
     (foo (isa Integer 5)) # returns 2
 
-Notice that when we used ``5``, both ``Number`` and ``Integer`` matched, but since ``Integer`` is a subset of ``Number``, it was used instead of throwing an error. We can manually override that by using ``isa``. This can also be used to fulfill the same purpose as ``super`` in Python::
+Notice that when we used ``5``, both ``Number`` and ``Integer`` matched, but since ``Integer`` is a subset of ``Number``, it was used instead of throwing an error. We can manually override that by using ``isa``.
+
+This can also be used to fulfill the same purpose as ``super`` in Python::
 
     (type Foo (isa Number))
 
@@ -236,7 +238,9 @@ Notice that when we used ``5``, both ``Number`` and ``Integer`` matched, but sin
 
     (qux 5) # returns 35
 
-What's going on here is that we have two types: Foo is a subset of Number, and Bar is a subset of Foo. So when we call ``qux`` with a number, it uses the extension for ``Bar`` because Bar is a subset of Foo. Now it calls qux again, but this time using ``isa`` to treat it as a Foo, so the Foo extension is called. The above is *very roughly* equivalent to the following Python code::
+What's going on here is that we have two types: ``Foo`` is a subset of ``Number``, and ``Bar`` is a subset of ``Foo``. So when we call ``qux`` with a number, it uses the extension for ``Bar`` because ``Bar`` is a subset of ``Foo``. Now it calls ``qux`` again, but this time using ``isa`` to treat it as a ``Foo``, so the ``Foo`` extension is called.
+
+The above is *very roughly* equivalent to the following Python code::
 
     class Foo(object):
         def __init__(self, x):
