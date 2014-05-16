@@ -129,7 +129,7 @@ You can also use types for *pattern matching*::
         (isa Positive _)
           2))
 
-If you call ``foo`` with an ``Integer`` it'll return ``1``, or if you call it with a ``Positive`` it'll return ``2``. The cases are tried top-to-bottom, so if you call ``foo`` with a positive integer it'll return ``1``::
+If you call ``foo`` with an ``Integer`` it'll return ``1``. If you call it with a ``Positive`` it'll return ``2``. The cases are tried top-to-bottom, so if you call ``foo`` with a positive integer it'll return ``1``::
 
     (foo -5)  # returns 1
     (foo 5.5) # returns 2
@@ -188,7 +188,7 @@ To resolve this is easy, you just use ``isa`` to switch to nominal typing::
     (sing (isa Duck {})) # returns "quack"
     (fly (isa Duck {}))  # returns "flies slowly!"
 
-Unlike nominal typing in Python, this is very flexible! Let's say we had some variable ``foo`` and we didn't know what type it was, we can just call it!
+Unlike nominal typing in Python, this is very flexible! Let's say we had some variable ``foo`` and we didn't know what type it was, we can just use it!
 
 ::
 
@@ -199,7 +199,7 @@ If it doesn't match any of the extensions you'll get an error. If it matches mul
 
 Basically, you can *just call the generic function* without worrying about the types. This gives the same flexibility as duck typing, but it's a **lot** safer: you're much more likely to get errors if something is wrong.
 
-To make things easier, another rule about generic functions is that subtypes always have precedence over supertypes. Remember how an ``Integer`` is a subtype of ``Number``, because it uses ``(isa Number)`` in the type declaration?
+To make things easier, another rule about generic functions is that subtypes always have precedence over supertypes. Remember how an ``Integer`` is a subtype of ``Number``, because it uses ``(isa Number)`` in the type declaration? Well, if we have this code...
 
 ::
 
@@ -217,7 +217,7 @@ To make things easier, another rule about generic functions is that subtypes alw
     (foo (isa Number 5))  # returns 1
     (foo (isa Integer 5)) # returns 2
 
-Notice that when we used ``5``, both ``Number`` and ``Integer`` matched, but since ``Integer`` is a subset of ``Number``, it was used instead of throwing an error. We can manually override that by using ``isa``.
+...notice that when we used ``5``, both ``Number`` and ``Integer`` matched, but since ``Integer`` is a subset of ``Number``, it was used instead of throwing an error. We can manually override that by using ``isa``.
 
 This can also be used for the same purpose as ``super`` in Python::
 
