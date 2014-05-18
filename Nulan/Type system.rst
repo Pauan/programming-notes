@@ -1,6 +1,4 @@
-Nulan's type system blends structural typing, nominal typing, duck typing, compile-time type checks, run-time type checks, and pattern matching... all together into a single seamless system. The end result is simple, powerful, and can also be optimized to be pretty fast. It allows you to create truly extensible programs.
-
-I'll start with types. In OOP languages [#oop]_ a class is a type. OOP languages [#oop]_ also use *nominal typing*, which means that something can only be of a single type, and two things that are identical in every way can still be treated as different types. To use Python as an example...
+In OOP languages [#oop]_ a class is a type. OOP languages [#oop]_ also use *nominal typing*, which means that something can only be of a single type, and two things that are identical in every way can still be treated as different types. To use Python as an example...
 
 ::
 
@@ -40,7 +38,7 @@ Nulan, however, takes a different approach to types. In Nulan, a type is more li
 
 ``Number`` is a built-in type that returns true if its argument is a 64-bit floating point JavaScript number. What the above means is... ``Positive`` is a ``Number`` that is greater than ``0``.
 
-So, obviously the ``type`` macro creates new types, but what does that ``isa`` thing mean? Within a type declaration, ``isa`` basically creates a subset relationship: we're saying that ``Positive`` is a subset of ``Number``. That means anywhere we can use a ``Number``, we can use a ``Positive`` as well.
+So, obviously the ``type`` macro creates new types, but what does that ``isa`` thing mean? In this particular case, ``isa`` basically creates a subset relationship: we're saying that ``Positive`` is a subset of ``Number``. That means anywhere we can use a ``Number``, we can use a ``Positive`` as well.
 
 To look at it another way, it just means that something belongs to the ``Positive`` type if (and only if) *both* the ``Number`` type and ``Positive`` type return true. If either returns false, then it doesn't belong to the ``Positive`` type. Let's create some more types::
 
@@ -60,25 +58,32 @@ Rather than being a function, a type can also be a dictionary. So, the ``Ellipse
 
 ``Circle`` is a standard type that just checks that the ``width`` and ``height`` properties of the ``Ellipse`` are the same.
 
-So that handles the duck typing/structural typing side of things, but what about nominal typing? Sometimes you really do want two things to be treated as different even if they have the same structure. For that purpose, Nulan lets you use the ``isa`` macro::
+To test whether a particular thing matches a type, you can use ``isa?``::
 
-    (isa Ellipse { width  = 5
+    (isa? { width  = 5
+            height = 5 } Circle)
+
+The above checks that the ``{ width = 5 height = 5 }`` dictionary matches the ``Circle`` type. In this case it does, so ``isa?`` returns true.
+
+So that handles the duck typing/structural typing side of things, but what about nominal typing? Sometimes you really do want two things to be treated as different even if they have the same structure. For that purpose, Nulan lets you use the ``new`` macro::
+
+    (new Ellipse { width  = 5
                    height = 5 })
 
-What's going on here? Well, first we created the dictionary ``{ width = 5 height = 5 }`` and then we said that the dictionary isa ``Ellipse``. What that does is it first checks that the dictionary matches the ``Ellipse`` type (it has width/height properties that are ``Positive``), and then it *wraps* the dictionary in such a way that it is now recognized as an ``Ellipse``.
+What's going on here? Well, first we created the dictionary ``{ width = 5 height = 5 }`` and passed it to the ``new`` function. The ``new`` function checked that the dictionary matched the ``Ellipse`` type, then it *wrapped* the dictionary in such a way that it is recognized as an ``Ellipse``, and lastly it returned the wrapper.
 
 Something that has been wrapped in ``Ellipse`` will only be treated as an ``Ellipse``. The above will never be treated as a ``Circle`` even though the ``Circle`` type matches it. This is nominal typing.
 
 Let's create a helper function to create ellipses::
 
     (def ellipse -> width height
-      (isa Ellipse { width height }))
+      (new Ellipse { width height }))
 
 Now we can create ellipses easily::
 
     (var my-ellipse = (ellipse 5 5))
 
-This is kinda like creating a class in Python: the ``Ellipse`` type defines the structure of the class, the ``ellipse`` function is like the ``__init__`` method in Python, and ``isa`` actually tags the dictionary as belonging to the class::
+This is kinda like creating a class in Python: the ``Ellipse`` type defines the structure of the class, the ``ellipse`` function is like the ``__init__`` method in Python, and ``new`` actually tags the dictionary as belonging to the class::
 
     class Ellipse(object):
         def __init__(self, width, height):
@@ -89,9 +94,9 @@ This is kinda like creating a class in Python: the ``Ellipse`` type defines the 
 
 Unlike in Python, you can change the type of something on the fly::
 
-    (var my-circle = (isa Circle my-ellipse))
+    (var my-circle = (new Circle my-ellipse))
 
-What's going on here is... we have ``my-ellipse`` which is wrapped with ``Ellipse``. When we pass it to ``isa``, it first unwraps it, then rewraps it with the ``Circle`` type. So now ``my-circle`` and ``my-ellipse`` are both using the same dictionary, but one is treated as an ``Ellipse`` while the other is treated as a ``Circle``.
+What's going on here is... we have ``my-ellipse`` which is wrapped with ``Ellipse``. When we pass it to ``new``, it first unwraps it, then rewraps it with the ``Circle`` type. So now ``my-circle`` and ``my-ellipse`` are both using the same dictionary, but one is treated as an ``Ellipse`` while the other is treated as a ``Circle``.
 
 You can use this to convert from one type to another type, any time you wish. This is not dangerous at all: in fact, it's idiomatic. It behaves sanely for two reasons:
 
@@ -99,50 +104,40 @@ You can use this to convert from one type to another type, any time you wish. Th
 
 #. You're not actually changing the existing type. In the above example, ``my-ellipse`` is one wrapper, and ``my-circle`` is a different wrapper. So when you "change" the type, you're actually just returning a new wrapper. No mutation.
 
-If you want to *unwrap* something so it's treated as structural typing again, you can use ``isa`` without any types::
-
-    (var my-whatever = (isa my-circle))
-
 You can also wrap something in multiple types::
 
-    (var my-positive-integer = (isa Positive Integer 5))
+    (var my-positive-integer = (new Positive Integer 5))
 
 Already this is vastly superior to the nominal typing found in OOP languages [#oop]_.
 
-So, to recap, a type is a function that returns true/false, or a dictionary that specifies required properties. A type can be a subset of 0 or more types. By default Nulan uses structural typing: as long as the type returns true it'll match. But you can wrap things with ``isa`` to have it behave like nominal typing. And you can wrap something with multiple types, and convert from one type to another whenever you want, as long as all the types return true.
+So, to recap, a type is a function that returns true/false, or a dictionary that specifies required properties. A type can be a subset of 0 or more types. By default Nulan uses structural typing: as long as the type returns true it'll match. But you can wrap things with ``new`` to have it behave like nominal typing. And you can wrap something with multiple types, and convert from one type to another whenever you want, as long as all the types return true.
 
 Now, how do we actually *use* these types to do things? First off, you can use them with functions::
 
-    (def foo -> (isa Positive Integer x)
+    (def foo -> (new Positive Integer x)
       x)
 
 Here we've created a function ``foo`` that requires its first argument to be both ``Positive`` and ``Integer``. It then simply returns its argument unmodified. Notice the syntax is the same as the syntax to wrap something: that's intentional.
 
-If you try to call ``foo`` with an argument that isn't a positive integer, it'll throw an error. This is very similar to contracts, which is a feature found in some other languages. You could also consider it as "assert on steroids".
+If you try to call ``foo`` with an argument that isn't a ``Positive Integer``, it'll throw an error::
+
+    (foo 5)                        # error
+    (foo (new Positive Integer 5)) # works
 
 You can also use types for *pattern matching*::
 
     (def foo -> x
       (match x
-        (isa Integer _)
+        (new Integer _)
           1
-        (isa Positive _)
+        (new Positive _)
           2))
 
-If you call ``foo`` with an ``Integer`` it'll return ``1``. If you call it with a ``Positive`` it'll return ``2``. The cases are tried top-to-bottom, so if you call ``foo`` with a positive integer it'll return ``1``::
+If you call ``foo`` with an ``Integer`` it'll return ``1``. If you call it with a ``Positive`` it'll return ``2``. The cases are tried top-to-bottom, so if you call ``foo`` with a ``Positive Integer`` it'll return ``1``::
 
-    (foo -5)  # returns 1
-    (foo 5.5) # returns 2
-    (foo 5)   # returns 1
-
-This also works with type wrapping::
- 
-    (foo 5)                        # returns 1
-    (foo (isa Integer 5))          # returns 1
-    (foo (isa Positive 5))         # returns 2
-    (foo (isa Positive Integer 5)) # returns 1
-
-Notice that even though ``5`` would normally cause ``foo`` to return ``1``, by wrapping it with ``Positive`` we caused it to return ``2``. It works just fine with multiple types too.
+    (foo (new Integer -5))         # returns 1
+    (foo (new Positive 5.5))       # returns 2
+    (foo (new Positive Integer 5)) # returns 1
 
 I saved the best for last: there's one more place where we can use types, and it's where all the magic happens. Nulan has *generic functions*, which are sometimes called *multimethods* in other languages. If you don't know what a generic function/multimethod is, it's basically a function that changes its behavior based on the type of its arguments.
 
@@ -158,141 +153,128 @@ Here we created two generic functions called ``sing`` and ``fly``. By default th
 You can then use the ``extend`` macro to add new behavior::
 
     (type Duck {})
-    
-    (extend sing -> (isa Duck x)
+
+    (def duck ->
+      (new Duck {}))
+
+    (extend sing -> (new Duck x)
       "quack")
 
-    (extend fly -> (isa Duck x)
+    (extend fly -> (new Duck x)
       "flies slowly!")
 
 
     (type Sparrow {})
+
+    (def sparrow ->
+      (new Sparrow {}))
     
-    (extend sing -> (isa Sparrow x)
+    (extend sing -> (new Sparrow x)
       "chirp chirp")
 
-    (extend fly -> (isa Sparrow x)
+    (extend fly -> (new Sparrow x)
       "flies gracefully!")
 
 Heeey, this is like what we did earlier with Python! It sure is, but rather than using methods, we're using generic functions. This is better because generic functions can work with Nulan's module system: a file input module can define a ``read`` generic function, a book module can define a ``read`` generic function, and they won't collide!
 
 So, let's try calling the generic functions::
 
-    (sing {}) # error: multiple matching patterns
-    (fly {})  # error: multiple matching patterns
+    (sing (duck))    # returns "quack"
+    (sing (sparrow)) # returns "chirp chirp"
 
-Oops, we got an error. Why? Well, generic functions have certain rules about how they behave. Since any part of your program can change any generic function at any time... you need some rules so you can keep things sane and easy to understand.
+    (fly (duck))     # returns "flies slowly!"
+    (fly (sparrow))  # returns "flies gracefully!"
 
-One of those rules is that you can't have multiple extensions match the same value. When you called the generic functions, both ``Duck`` and ``Sparrow`` matched! Remember, Nulan uses structural typing by default, and both the ``Duck`` and ``Sparrow`` types are defined as being an empty dictionary, so they have the same structure.
-
-To resolve this is easy, you just use ``isa`` to switch to nominal typing::
-
-    (sing (isa Duck {})) # returns "quack"
-    (fly (isa Duck {}))  # returns "flies slowly!"
-
-Unlike nominal typing in Python, this is very flexible! Let's say we had some variable ``foo`` and we didn't know what type it was... we can just use it!
+Hey, sweet, it worked! This is just as flexible as duck-typing in Python. Let's say we had some variable ``foo`` and we didn't know what type it was... we can just use it!
 
 ::
 
     (sing foo)
     (fly foo)
 
-If it doesn't match any of the extensions you'll get an error. If it matches multiple extensions you'll get an error, which you can resolve by using ``isa``. And if only one extension matches, it'll be used.
+If none of the types match you'll get an error. Basically, you can *just call the generic function* without worrying about the types. And unlike in Python, there's no chance for *false positives*: a file input module can have a ``read`` generic function... a book module can have a ``read`` generic function... and they won't collide! You can easily have a type that extends both the file input ``read`` and the book ``read``, without any ambiguity!
 
-Basically, you can *just call the generic function* without worrying about the types. This gives the same flexibility as duck typing, but it's a **lot** safer: you're much more likely to get errors if something is wrong.
-
-To make things easier, another rule about generic functions is that subtypes always have precedence over supertypes. Remember how an ``Integer`` is a subtype of ``Number``, because it uses ``(isa Number)`` in the type declaration? Well, if we have this code...
+By the way, as a convenience, you can also do this...
 
 ::
+
+    (generic foo -> (isa Foo x)
+      ...)
+
+...which is exactly the same as this::
 
     (generic foo)
-    
-    (extend foo -> (isa Number x)
-      1)
+    (extend foo -> (isa Foo x)
+      ...)
 
-    (extend foo -> (isa Integer x)
-      2)
+Also, because we can convert between types, we get Python's ``super`` for free::
 
-    (foo 5.5)             # returns 1
-    (foo 5)               # returns 2
+    (type Event
+      { listeners = (isa Array) })
 
-    (foo (isa Number 5))  # returns 1
-    (foo (isa Integer 5)) # returns 2
+    (def event ->
+      (new Event { listeners = [] }))
 
-...notice that when we used ``5``, both ``Number`` and ``Integer`` matched, but since ``Integer`` is a subset of ``Number``, it was used instead of throwing an error. We can manually override that by using ``isa``.
+    (generic on -> (new Event { listeners }) f
+      (push listeners f))
 
-This can also be used for the same purpose as ``super`` in Python::
-
-    (type Foo (isa Number))
-
-    (type Bar (isa Foo))
+    (generic send -> (new Event { listeners }) value
+      (each listeners -> f
+        (f value)))
 
 
-    (generic qux)
+    (type Signal (isa Event)
+      { value })
 
-    (extend qux -> (isa Foo x)
-      (+ x 10))
+    (def signal -> value
+      (new Signal { value listeners = [] }))
 
-    (extend qux -> (isa Bar x)
-      # call the Foo extension and add 20 to it
-      (+ (qux (isa Foo x)) 20))
+    (generic current -> (new Signal { value })
+      value)
 
+    (extend on -> (new Signal x) f
+      (do (f x.value)
+          (on (new Event x))))
 
-    (qux 5) # returns 35
+    (extend send -> (new Signal x) value
+      (do (<= x.value value)
+          (send (new Event x))))
 
-What's going on here is that we have two types: ``Foo`` is a subset of ``Number``, and ``Bar`` is a subset of ``Foo``. So when we call ``qux`` with a number, it uses the extension for ``Bar`` because ``Bar`` is a subset of ``Foo``. Now it calls ``qux`` again, but this time using ``isa`` to treat it as a ``Foo``, so the ``Foo`` extension is called.
+What's going on here is that we have a type for event listeners called ``Event``. As you can see, it has an array of listeners. We can use ``on`` to add new listeners and ``send`` to send a value to the listeners. If you've used the DOM, ``on`` is like ``addEventListener`` and ``send`` is like ``dispatchEvent``.
 
-The above is *very roughly* equivalent to the following Python code::
+We also have a ``Signal`` type, which is the same as an ``Event`` except it also has a *current value*. This is useful for things like, say, the mouse cursor. You might want to get the current x/y coordinates of the mouse cursor... but also be notified when the x/y coordinates change.
 
-    class Foo(object):
-        def __init__(self, x):
-            self.value = x
-        def qux(self):
-            return self.value + 10
+When you call ``on`` with a ``Signal`` it behaves the same as calling ``on`` with an ``Event`` except it'll also call the function straight away. And calling ``send`` with a ``Signal`` is the same as calling ``send`` with an ``Event`` except it'll also update the current value of the signal.
 
-    class Bar(Foo):
-        def qux(self):
-            return super(Bar, self).qux() + 20
+Notice that the actual code exactly follows the above description: we first do something specific to ``Signal`` and then we call ``on``/``send`` again... but we use ``(new Event x)`` so that the ``Signal`` is temporarily treated as an ``Event``. This is equivalent to the following Python code::
 
-    Bar(5).qux()
+    class Event(object):
+        def __init__(self):
+            self.listeners = []
 
-So, by using ``isa`` you can choose which extension to call. This lets you emulate ``super`` but is actually much more powerful, since you can choose *any* arbitrary extension, not just the extension for the supertype.
+        def on(self, f):
+            self.listeners.append(f)
 
-Compared to plain-old functions, generic functions are significantly slower. The reason for this is because they have to check which extensions match, every single time you call the generic function. However, it's possible to *partially* determine the types of things at *compile-time*, removing the overhead of generic functions.
+        def send(self, value):
+            for f in self.listeners:
+                f(value)
 
-The way it works is that every time you wrap something with ``isa``, the compiler will keep track of it, so if you do this...
+    class Signal(Event):
+        def __init__(self, value):
+            self.listeners = []
+            self.value = value
 
-::
+        def current(self):
+            return self.value
 
-    (var foo = (isa Number 5))
+        def on(self, f):
+            f(self.value)
+            super(Signal, self).on(f)
 
-...then the compiler knows that ``foo`` isa ``Number``. It doesn't know whether ``5`` actually matches the ``Number`` type or not (type-checking always happens at run-time), but the compiler can safely *assume* that the ``Number`` type matches, because if it didn't... you'd get a run-time error.
+        def send(self, value):
+            self.value = value
+            super(Signal, self).send(value)
 
-Now if you call a generic function...
-
-::
-
-    (some-generic-function foo)
-
-...since the compiler knows that ``foo`` isa ``Number``, it can do the generic function lookup at *compile-time*, making it just as fast as a normal function call. It can also throw an error *at compile-time* if there isn't any matching extension.
-
-Of course this only works if you explicitly tag things with ``isa``, but that's the beauty of this system: if you don't mark things with ``isa``, it just falls back to the slower run-time lookup. So by using ``isa``, you make your program safer and faster, but if you want more flexibility, that's fine too... you'll just pay a price for it. And it's totally fine to mix and match, having parts of your program using ``isa`` and parts not using ``isa``.
-
-One restriction to keep in mind is that the compiler can't know what's inside of a *compound data type* like an array or a dictionary. So this won't be optimized::
-
-    (var foo = { value = (isa Number 5) })
-
-    (some-generic-function foo.value)
-
-But if you use types, Nulan can use that information... for instance::
-
-    (type Foo
-      { value = (isa Number) })
-
-    (var foo = (isa Foo { value = 5 }))
-
-    (some-generic-function foo.value)
-
-We know that ``foo`` isa ``Foo`` and that ``Foo`` is a dictionary that has a ``value`` property which isa ``Number``. That's a lot of information that the compiler can use to speed things up! And when it can't, it'll just fall back to run-time lookups.
+But unlike Python's ``super``, you can convert from any type to any type (as long as the types match), so you can precisely specify exactly which behavior to use rather than always using the behavior for the supertype.
 
 .. [#oop] When I say "OOP languages", I mean ones like Python, Ruby, JavaScript, Smalltalk, etc.
