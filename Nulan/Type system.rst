@@ -5,14 +5,18 @@ In OOP languages [#oop]_ a class is a type. OOP languages [#oop]_ also use *nomi
     class Duck(object):
         def sing(self):
             return "quack"
+
         def fly(self):
             return "flies slowly!"
+
 
     class Sparrow(object):
         def sing(self):
             return "chirp chirp"
+
         def fly(self):
             return "flies gracefully!"
+
 
     Duck().sing()
     Sparrow().sing()
@@ -27,7 +31,7 @@ Python also has something called "duck typing". What this basically means is tha
 
 If it's a ``Duck`` it'll quack, if it's a ``Sparrow`` it'll chirp, and if it's neither, you'll probably get an "attribute missing" error. This is *structural typing*: we only care about the *structure* of the type, not the type itself.
 
-This is very flexible, since we can easily create new types that have a ``sing`` method and they will *just work*! But it also causes *false positives*, where something is treated as a Duck/Sparrow even though it's not. As an example, a ``FileInput`` port and a ``Book`` both have a ``read`` method, but they do completely separate things!
+This is very flexible, since we can easily create new types that have a ``sing`` method and they will *just work*! But it also causes *false positives*, where something is treated as a ``Duck``/``Sparrow`` even though it's not. As an example, a ``FileInput`` port and a ``Book`` both have a ``read`` method, but they do completely separate things!
 
 So, nominal typing is safe but inflexible, while structural typing is flexible but unsafe.
 
