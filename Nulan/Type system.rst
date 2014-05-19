@@ -65,7 +65,7 @@ To test whether a particular thing matches a type, you can use ``isa?``::
 
 The above checks that the ``{ width = 5 height = 5 }`` dictionary matches the ``Circle`` type. In this case it does, so ``isa?`` returns true.
 
-So that handles the duck typing/structural typing side of things, but what about nominal typing? Sometimes you really do want two things to be treated as different even if they have the same structure. For that purpose, Nulan lets you use the ``new`` macro::
+So that handles the duck typing/structural typing side of things, but what about nominal typing? Sometimes you really do want two things to be treated as different even if they have the same structure. For that purpose, you can use the ``new`` function::
 
     (new Ellipse { width  = 5
                    height = 5 })
@@ -102,7 +102,7 @@ You can use this to convert from one type to another type, any time you wish. Th
 
 #. In order to wrap something in a type, the type has to return true. You can never violate the type's contract/assumptions.
 
-#. You're not actually changing the existing type. In the above example, ``my-ellipse`` is one wrapper, and ``my-circle`` is a different wrapper. So when you "change" the type, you're actually just returning a new wrapper. No mutation.
+#. You're not actually changing the existing type. In the above example, ``my-ellipse`` is a wrapper, and ``my-circle`` is a different wrapper. So when you "change" the type, you're actually just returning a new wrapper. No mutation.
 
 You can also wrap something in multiple types::
 
@@ -117,7 +117,7 @@ Now, how do we actually *use* these types to do things? First off, you can use t
     (def foo -> (new Positive Integer x)
       x)
 
-Here we've created a function ``foo`` that requires its first argument to be both ``Positive`` and ``Integer``. It then simply returns its argument unmodified. Notice the syntax is the same as the syntax to wrap something: that's intentional.
+Here we've created a function ``foo`` that requires its first argument to be both ``Positive`` and ``Integer``. It then simply returns its argument unmodified.
 
 If you try to call ``foo`` with an argument that isn't a ``Positive Integer``, it'll throw an error::
 
@@ -148,7 +148,7 @@ How does it work? First, you use the ``generic`` macro to create a generic funct
     (generic sing)
     (generic fly)
 
-Here we created two generic functions called ``sing`` and ``fly``. By default they don't have any behavior, so if you try to call them you'll always get an error.
+Here we created two generic functions called ``sing`` and ``fly``. By default they don't have any behavior, so if you try to call them you'll get an error.
 
 You can then use the ``extend`` macro to add new behavior::
 
@@ -175,7 +175,7 @@ You can then use the ``extend`` macro to add new behavior::
     (extend fly -> (new Sparrow x)
       "flies gracefully!")
 
-Heeey, this is like what we did earlier with Python! It sure is, but rather than using methods, we're using generic functions. This is better because generic functions can work with Nulan's module system: a file input module can define a ``read`` generic function, a book module can define a ``read`` generic function, and they won't collide!
+Heeey, this is like what we did earlier with Python! It sure is, but rather than using methods, we're using generic functions.
 
 So, let's try calling the generic functions::
 
@@ -192,7 +192,9 @@ Hey, sweet, it worked! This is just as flexible as duck-typing in Python. Let's 
     (sing foo)
     (fly foo)
 
-If none of the types match you'll get an error. Basically, you can *just call the generic function* without worrying about the types. And unlike in Python, there's no chance for *false positives*: a file input module can have a ``read`` generic function... a book module can have a ``read`` generic function... and they won't collide! You can easily have a type that extends both the file input ``read`` and the book ``read``, without any ambiguity!
+If none of the types match you'll get an error. Basically, you can *just call the generic function* without worrying about the types.
+
+And unlike in Python, there's no chance for *false positives*: a file input module can have a ``read`` generic function... a book module can have a ``read`` generic function... and they won't collide! You can easily have a type that extends both the file input ``read`` and the book ``read``, without any ambiguity!
 
 By the way, as a convenience, you can also do this...
 
