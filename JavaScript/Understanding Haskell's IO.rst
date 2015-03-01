@@ -28,11 +28,6 @@ First, I must define what it means for a function to be "pure" or "impure":
 When I say that a language is "purely functional" (like Haskell), that means that *every single
 function in the entire language* is pure. No exceptions.
 
-There is another kind of language, which I will call "mostly purely functional". An example
-is Clojure: it tries really hard to be purely functional, but it has a handful of impure
-functions (e.g. for reading files). That means a typical Clojure program will have lots of
-pure functions, with some impure functions here and there.
-
 Hold on a minute, if Haskell is a purely functional language, then *by definition* it
 cannot do any kind of I/O! But Haskell *can* do I/O, so why do I claim that
 it is purely functional?!
