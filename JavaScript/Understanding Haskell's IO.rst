@@ -7,9 +7,10 @@ In particular, you might have heard that Haskell is "purely functional", but wha
 First, I must define what it means for a function to be "pure" or "impure":
 
 * A pure function is very simple: it takes in input, and returns output. If given the same
-  input, it will **always** give the same output. In addition, it cannot mutate anything.
-  It cannot mutate a global variable. It cannot mutate a property in an object. It cannot
-  do any kind of I/O [1]_ (like reading a file).
+  input, it will **always** give the same output.
+
+  In addition, it cannot mutate anything. It cannot mutate a global variable. It cannot
+  mutate a property in an object. It cannot do any kind of I/O [1]_ (like reading a file).
 
   Here is an example of a pure function:
 
@@ -19,8 +20,8 @@ First, I must define what it means for a function to be "pure" or "impure":
       return x + y;
     }
 
-  If you give the same inputs to ``add``, you will get back the same result. And it's clear
-  simply by looking at it that it does not mutate anything, and it does not do any I/O.
+  If you give the same inputs to ``add``, you will get back the same result. And it's obvious
+  that it does not mutate anything, and it does not do any I/O.
 
 * An impure function is *any* function that is not pure. Most functions in JavaScript are impure.
 
@@ -30,7 +31,7 @@ function in the entire language* is pure. No exceptions.
 There is another kind of language, which I will call "mostly purely functional". An example
 is Clojure: it tries really hard to be purely functional, but it has a handful of impure
 functions (e.g. for reading files). That means a typical Clojure program will have lots of
-pure functions, with a little smattering of impure functions here and there.
+pure functions, with some impure functions here and there.
 
 Hold on a minute, if Haskell is a purely functional language, then *by definition* it
 cannot do any kind of I/O! But Haskell *can* do I/O, so why do I claim that
@@ -51,7 +52,7 @@ To do this, we'll create an ``IO`` type, which doesn't actually do anything, it 
     this.args = args;
   }
 
-Now, ordinarily ``console.log`` prints something to the console and returns
+Ordinarily, the ``console.log`` function prints something to the console and returns
 ``undefined``, but let's instead write a pure version that doesn't do anything, but
 returns an ``IO``:
 
@@ -64,7 +65,7 @@ returns an ``IO``:
 You'll notice that when given the same inputs, we get back an ``IO`` with the same
 ``type`` and ``args`` [2]_. So this is a pure function.
 
-Let's write some pure functions that read/write files:
+Let's write some pure functions that read / write files:
 
 .. code:: javascript
 
@@ -78,11 +79,11 @@ Let's write some pure functions that read/write files:
 
 Hurray, we solved the contradiction, let's celebrate with a party! Oh, but there's just
 one tiny little problem... our ``log`` function doesn't actually print anything to the
-console. And our ``readFile`` and ``writeFile`` don't actually read/write files.
+console. And our ``readFile`` and ``writeFile`` don't actually read / write files.
 Oops, I guess we should fix that.
 
 But we want to keep ``log``, ``readFile``, and ``writeFile`` pure. So instead, let's
-write an *impure* function called ``run``:
+write an **impure** function called ``run``:
 
 .. code:: javascript
 
@@ -110,9 +111,9 @@ Now we can do stuff!
 
   run(writeFile("qux", "corge"));
 
-This seems kind of silly, though: we have to use this annoying ``run`` function all
+This seems kind of silly: we have to use this annoying ``run`` function all
 the time. Even worse, ``readFile`` is useless, because ``run`` always returns
-``undefined``. And any errors when reading/writing a file are ignored!
+``undefined``. And any errors when reading / writing a file are ignored!
 
 Let's fix this by writing a pure function called ``chain`` [3]_:
 
@@ -176,13 +177,14 @@ the file, and will then write the data to another file.
 If you think the above code looks a lot like Promises, you're
 right! There are a lot of similarities between Promises and ``IO``.
 
-But there are some differences too. A ``copy`` function using Promises
-actually does I/O, and so it's impure.
+But there are some differences too:
 
-But our ``copy`` function doesn't do any I/O, it just returns an ``IO``,
-and so it's pure. It's only the ``run`` function that's impure.
+* A ``copy`` function using Promises actually does I/O, and so it's impure.
 
-Let's try adding a bit of logging:
+* Our ``copy`` function doesn't do any I/O, it just returns an ``IO``,
+  and so it's pure. It's only the ``run`` function that's impure.
+
+Let's try adding in a bit of logging:
 
 .. code:: javascript
 
@@ -197,7 +199,7 @@ Let's try adding a bit of logging:
   }
 
 Our new version of ``copy`` will copy the file just like before, but it will
-also print to the console when it reads/writes to the file.
+also print to the console after it reads / writes to the file.
 
 The above code is really difficult to read. So let's add in a bit of syntax:
 
@@ -245,7 +247,7 @@ Instead, the ``run`` function is *automatically* called, like this:
 
 Now, let's take a step back and look at this system. All of our
 functions are pure: ``main``, ``log``, ``readFile``, ``writeFile``,
-and ``copy`` all return ``IO`` objects: they don't actually do any
+and ``copy`` all return ``IO`` objects, they don't actually do any
 I/O.
 
 And we're no longer allowed to call the ``run`` function, instead
@@ -273,20 +275,19 @@ program.
 
     No, it does not, and the reason is because of the way that
     ``chain`` works. If you look at the implementation in ``run``,
-    you'll see that it *first* runs the ``IO``, and only afterwards
+    you'll see that it *first* runs the ``IO``, and only *afterwards*
     it calls the function. This guarantees that ``IO`` are always
     run in the correct order.
 
   * It can avoid evaluating things until they're needed.
 
-    Does that mean that an ``IO`` might never be run? No, because
-    the ``IO`` that is returned from ``main`` is always run, and
-    in order to run that ``IO``, it has to run any ``IO`` that it
-    depends upon.
+    Does that mean that an ``IO`` might never be run? That depends:
 
-    Basically, as long as all your ``IO`` are connected to
-    ``main``, either directly or indirectly, they will be run,
-    in the correct order, with correct error checking.
+    * If the ``IO`` is connected either directly or indirectly to
+      ``main``, then it will be run (in the correct order, with error
+      checking).
+
+    * But if it's not connected to ``main``, then it won't be run.
 
   * If the same function is called twice with the same arguments,
     the compiler can avoid calling it a second time, because it
@@ -303,7 +304,7 @@ program.
     behavior of the program.
 
   * Because pure functions can be evaluated in any order, they're really
-    easy to evaluated in parallel. The compiler can even do this
+    easy to evaluate in parallel. The compiler can even do this
     automatically for you, without changing the behavior of your program.
 
 * It's much easier to write unit tests for pure functions.
@@ -340,13 +341,14 @@ program.
   With ``IO``, either the I/O occurs (with correct error checking), or
   the I/O does not occur. So we would notice the mistake much sooner.
 
-.. [1] I/O is short for input/output, and it includes things like reading/writing a file,
-       sending/receiving stuff over the network, printing to the console, etc.
+.. [1] I/O is short for input / output, and it includes things like reading / writing a file,
+       sending / receiving stuff over the network, printing to the console, etc.
 
 .. [2] A clever reader might remark that because JavaScript has object equality, even if the
-       ``type``, and ``args`` are the same, the ``IO`` object itself is different.
+       ``type`` and ``args`` are the same, the ``IO`` object itself is different.
 
        That is correct, but it's also irrelevant to this guide. Haskell has value equality,
        so just pretend that JavaScript has value equality (rather than object equality).
 
-.. [3] In Haskell, the ``chain`` function is called ``>>=``.
+.. [3] In Haskell, the ``chain`` function is called ``>>=``. In addition, it works on all
+       Monads, not just ``IO``.
