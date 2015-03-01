@@ -276,7 +276,7 @@ program.
     No, it does not, and the reason is because of the way that
     ``chain`` works. If you look at the implementation in ``run``,
     you'll see that it *first* runs the ``IO``, and only *afterwards*
-    it calls the function. This guarantees that ``IO`` are always
+    it calls the function. That guarantees that ``IO`` are always
     run in the correct order.
 
   * It can avoid evaluating things until they're needed.
@@ -305,7 +305,10 @@ program.
 
   * Because pure functions can be evaluated in any order, they're really
     easy to evaluate in parallel. The compiler can even do this
-    automatically for you, without changing the behavior of your program.
+    automatically, without changing the behavior of your program.
+
+    This is one of the reasons why Haskell programs are so fast with
+    multiple CPU cores.
 
 * It's much easier to write unit tests for pure functions.
 
@@ -338,11 +341,20 @@ program.
       });
     }
 
+  Here's another example, also using Promises:
+
+  .. code:: javascript
+
+    var foo = readFile("bar");
+
+  If an error occurs, but ``foo`` is never used, then the error is silently
+  ignored.
+
   With ``IO``, either the I/O occurs (with correct error checking), or
   the I/O does not occur. So we would notice the mistake much sooner.
 
 .. [1] I/O is short for input / output, and it includes things like reading / writing a file,
-       sending / receiving stuff over the network, printing to the console, etc.
+       sending / receiving stuff over the internet, printing to the console, etc.
 
 .. [2] A clever reader might remark that because JavaScript has object equality, even if the
        ``type`` and ``args`` are the same, the ``IO`` object itself is different.
