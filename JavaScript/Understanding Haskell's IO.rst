@@ -352,6 +352,14 @@ program.
   With ``IO``, either the I/O occurs (with correct error checking), or
   the I/O does not occur. So we would notice the mistake much sooner.
 
+* In this guide I focused solely on the ``IO`` type, but the ``chain``
+  function actually works on all monads. ``IO`` is just one of many
+  monads: even without ``IO``, monads would still be useful.
+
+  Basically, what I'm saying is, monads are a more general pattern, and
+  ``IO`` just happens to fit in nicely with them. So by implementing
+  ``IO`` in this way, we end up with a simpler language.
+
 .. [1] I/O is short for input / output, and it includes things like reading / writing a file,
        sending / receiving stuff over the internet, printing to the console, etc.
 
@@ -362,4 +370,4 @@ program.
        so just pretend that JavaScript has value equality (rather than object equality).
 
 .. [3] In Haskell, the ``chain`` function is called ``>>=``. In addition, it works on all
-       Monads, not just ``IO``.
+       monads, not just ``IO``.
