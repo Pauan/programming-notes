@@ -251,7 +251,10 @@ concerned, everything is pure! The only impure part of our program
 is the ``run`` function, which is hidden from us.
 
 And that's how Haskell is able to do I/O while still being purely
-functional.
+functional. Of course, it's possible to abuse this and write your
+program in a heavily-imperative style, so it's probably best to
+avoid ``IO`` as much as you can: even if ``IO`` is purely
+functional, ``run`` is not!
 
 But, why do all of this? Why not just use impure I/O functions, or
 Promises, or whatever?
