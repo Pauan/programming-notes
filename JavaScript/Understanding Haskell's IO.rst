@@ -358,7 +358,9 @@ program.
 
   Basically, what I'm saying is, monads are a more general pattern, and
   ``IO`` just happens to fit in nicely with them. So by implementing
-  ``IO`` in this way, we end up with a simpler language.
+  ``IO`` in this way, we end up with a simpler and more powerful
+  language: we can create functions that work on any monad, and they
+  will work just as well with ``IO``.
 
 .. [1] I/O is short for input / output, and it includes things like reading / writing a file,
        sending / receiving stuff over the internet, printing to the console, etc.
