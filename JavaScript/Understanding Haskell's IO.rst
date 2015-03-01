@@ -263,10 +263,10 @@ program.
 
 * Because of this, the compiler can do all kinds of optimizations:
 
-  * It can re-arrange the order that things are evaluated. You might
-    worry about this: if the ``IO`` functions are pure, what if the
-    compiler decides to re-arrange the order? Wouldn't that break
-    the program?
+  * It can re-arrange the order that things are evaluated.
+
+    Hold on, if the ``IO`` functions are pure, what if the compiler
+    decides to re-arrange the order? Wouldn't that break the program?
 
     No, it does not, and the reason is because of the way that
     ``chain`` works. If you look at the implementation in ``run``,
@@ -282,7 +282,8 @@ program.
       ``main``, then it will be run (in the correct order, with error
       checking).
 
-    * But if it's not connected to ``main``, then it won't be run.
+    * But if it's not connected to ``main``, then it won't be run at
+      all.
 
   * If the same function is called twice with the same arguments,
     the compiler can avoid calling it a second time, because it
@@ -351,7 +352,7 @@ program.
 .. [1] I/O is short for input / output, and it includes things like reading / writing a file,
        sending / receiving stuff over the internet, printing to the console, etc.
 
-.. [2] A clever reader might remark that because JavaScript has object equality, even if the
+.. [2] A clever reader might point out that because JavaScript has object equality, even if the
        ``type`` and ``args`` are the same, the ``IO`` object itself is different.
 
        That is correct, but it's also irrelevant to this guide. Haskell has value equality,
