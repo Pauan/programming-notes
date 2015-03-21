@@ -431,7 +431,7 @@ We can also use ``bind`` to execute one Task after another:
 
 Now it correctly waits 1 second, and then logs to the console.
 
-By using this, we can write a function that copies a file:
+By using ``bind``, we can write a function that copies a file:
 
 .. code:: javascript
 
@@ -485,7 +485,7 @@ using the asynchronous ``fs.readFile`` and ``fs.writeFile``!
 ----
 
 So, why did we bother wrapping Promises with Tasks? Why not just use Promises directly?
-The problem is that Promises are *impure*, so we can't have good stuff like dead code
+The problem is that Promises are *impure*, so we can't have awesome stuff like dead code
 removal. But there's another reason: error handling. Here's how it would look if we used
 Promises rather than Tasks:
 
@@ -495,9 +495,10 @@ Promises rather than Tasks:
     // `file` is a string that contains the contents of the file "foo"
   });
 
-It's a bit shorter, but it has a nasty problem: if there's an error with ``readFile``, it will
-be *silently ignored*. With Tasks, we *have* to use the ``execute`` function, which always
-logs errors to the console, so they are never silently ignored.
+Since we don't have to use ``execute``, the code is a bit shorter, but it has a nasty
+problem: if there's an error with ``readFile``, it will be *silently ignored*. With Tasks,
+we *have* to use the ``execute`` function, which always logs errors to the console, so they
+are never silently ignored.
 
 Okay, so maybe you're convinced that wrapping stuff in Tasks is a good idea. I mean, you get
 good error handling, dead code removal, and all that good stuff, because Tasks are pure.
@@ -552,11 +553,17 @@ Consider this function:
     }
   }
 
-Now we can execute a Task over and over again, forever:
+Now we can execute a Task over and over again, forever. An example of where this is useful is
+a server which constantly listens for clients to connect:
 
 .. code:: javascript
 
-  var main = forever(log("hi!"));
+  var port = 80;
+
+  var main = forever(do {
+    client <- listen(port);
+    handleClient(client);
+  });
 
 We did this with just an ordinary function: we didn't need a ``while`` loop, or a macro, or
 anything like that.
