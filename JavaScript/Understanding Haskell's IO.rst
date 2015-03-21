@@ -270,8 +270,10 @@ So now we can do impure stuff:
 
   execute(error("bar"));
 
-Rather than using hard-coded strings for each action, let's instead have our Tasks return a
-`JavaScript Promise <https://www.promisejs.org/>`_:
+----
+
+However, it's annoying that we have to add a new ``} else if (task.action === "...") {`` to
+``execute`` every time we want to add a new Task. So let's change the implementation:
 
 .. code:: javascript
 
@@ -291,7 +293,10 @@ Rather than using hard-coded strings for each action, let's instead have our Tas
     });
   }
 
-And let's change our ``execute`` function so that it can handle Promises:
+Rather than being a string and an array of arguments, a Task is now a function that when
+called will return a `JavaScript Promise <https://www.promisejs.org/>`_.
+
+Let's change our ``execute`` function so that it can handle Promises:
 
 .. code:: javascript
 
