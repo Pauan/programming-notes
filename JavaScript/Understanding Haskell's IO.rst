@@ -7,7 +7,7 @@ In particular, you might have heard that Haskell is "purely functional", but wha
 First, I must define what it means for a function to be "pure" or "impure":
 
 * A pure function is very simple: it takes in input, and returns output. If given the same
-  input, it will **always** give the same output.
+  input, it will **always** return the same output.
 
   In addition, it cannot mutate anything. It cannot mutate global variables. It cannot mutate
   local variables. It cannot mutate properties in an object. It cannot throw an exception. It
@@ -30,7 +30,7 @@ First, I must define what it means for a function to be "pure" or "impure":
 When I say that a language is "purely functional" (like Haskell), that means that *every single
 function in the entire language* is pure. No exceptions.
 
-Why would we want this? Isn't purity just some abstract academic thing that has no practical
+Why would you want that? Isn't purity just some abstract academic thing that has no practical
 benefit? On the contrary, there are multiple *significant* benefits to pure functions:
 
 * Dead code removal. What that means is, if some code isn't used, the compiler can just
@@ -54,23 +54,23 @@ benefit? On the contrary, there are multiple *significant* benefits to pure func
   a lot of useful functions, but you only want to use a small handful of them. In JavaScript,
   you only have two options:
 
-  1. Import the big library and just use it.
+  * Import the big library and just use it.
 
-  2. Create a fork of the library, remove all the things you don't use, and then import the fork.
+  * Create a fork of the library, remove all the things you don't use, and then import the fork.
 
   Neither option is very good: importing the big library bloats up the size of your JavaScript
-  files, which means longer downloads for people visiting your website. And creating/maintaining
+  files, which means longer downloads for people visiting your website. And creating / maintaining
   a fork is time-consuming and tedious.
 
   But if the compiler can automatically remove dead code, then you have a third option:
 
-  3. Import the big library and just use it. The compiler will automatically remove anything you
+  * Import the big library and just use it. The compiler will automatically remove anything you
      don't use.
 
   Okay, so let's just write a dead code remover for JavaScript! There's two major JavaScript
   compilers that can remove dead code:
 
-  1. The `UglifyJS <https://github.com/mishoo/UglifyJS2>`_ minifier removes dead code, but only if
+  * The `UglifyJS <https://github.com/mishoo/UglifyJS2>`_ minifier removes dead code, but only if
      it can prove that the code is pure. Because JavaScript code can have arbitrary side effects,
      it's *extremely* hard to prove that a particular function is pure.
 
@@ -80,7 +80,7 @@ benefit? On the contrary, there are multiple *significant* benefits to pure func
      So the end result is that it removes very little dead code, and so it's not very useful for
      big libraries.
 
-  2. The `Google Closure Compiler <https://github.com/google/closure-compiler>` with
+  * The `Google Closure Compiler <https://github.com/google/closure-compiler>`_ with
      ADVANCED_OPTIMIZATIONS removes a lot of dead code, because it removes dead code even if it
      *can't* prove that it's pure. This is one of the reasons why ADVANCED_OPTIMIZATIONS breaks a
      lot of JavaScript libraries.
@@ -89,10 +89,10 @@ benefit? On the contrary, there are multiple *significant* benefits to pure func
   or to remove lots of dead code but break perfectly valid programs. Both options are bad.
 
   But if *all* your code is pure, then the compiler can aggressively remove **all** the dead code,
-  and it's *guaranteed* to not change your program's behavior. The end result is that you can use
-  lots of big libraries, but it'll compile down to very small code, which means faster downloads!
+  and it's *guaranteed* to not break your program. The end result is that you can use lots of big
+  libraries, but it'll compile down to very small code, which means faster downloads!
 
-* Running code on multiple threads/cores is becoming more and more important, yet most programming
+* Running code on multiple threads / cores is becoming more and more important, yet most programming
   languages have an incredibly hard time dealing with parallel code.
 
   The reason is: the behavior of an impure function depends on *when* it is executed, and parallel
@@ -100,7 +100,7 @@ benefit? On the contrary, there are multiple *significant* benefits to pure func
   way to deal with this is to use locks, which are slow and easy to get wrong.
 
   On the other hand, pure code *does not care* what order it is evaluated in, and so it's incredibly
-  easy to run pure code on multiple threads/cores. It does not require any locks, and race conditions
+  easy to run pure code on multiple threads / cores. It does not require any locks, and race conditions
   are impossible.
 
   Consider this JavaScript program:
@@ -114,7 +114,7 @@ benefit? On the contrary, there are multiple *significant* benefits to pure func
 
   But if they are pure, then they could be run in any order, and they could even be run in parallel.
   A smart compiler could notice this and *automatically* run your code in parallel for you. It can
-  do this without changing the behavior of your program *because the functions are pure*.
+  do this without breaking your program *because the functions are pure*.
 
   For similar reasons, pure functions work very well with distributed programs (where a program is
   run on multiple separate computers). An example is a server cluster which has many machines
@@ -129,30 +129,31 @@ benefit? On the contrary, there are multiple *significant* benefits to pure func
   melts away.
 
   It also allows for cool stuff like Haskell's `QuickCheck <https://en.wikipedia.org/wiki/QuickCheck>`_,
-  which can *automatically* write your unit tests, when given a simple specification.
+  where you give it a simple specification, and it then *automatically* writes your unit tests.
 
 There are other benefits to pure code, like increased compiler optimizations, laziness, etc. but
 in my opinion they're not as important.
 
 So, pure functions are clearly awesome. But we **need** impurity, because we need to able to do
-useful stuff like log to the console, throw exceptions, read/write to a file, open a network socket,
+useful stuff like log to the console, throw exceptions, read / write to a file, open a network socket,
 etc.
 
-And so some languages like `ML <http://en.wikipedia.org/wiki/ML_(programming_language)>`_ or
-`Clojure <http://en.wikipedia.org/wiki/Clojure>`_ are *mostly* pure. That means they strongly
+Because of that, some languages like `ML <http://en.wikipedia.org/wiki/ML_(programming_language)>`_
+or `Clojure <http://en.wikipedia.org/wiki/Clojure>`_ are *mostly* pure. That means they strongly
 encourage writing pure functions, but they have a handful of impure functions for doing useful
 things.
 
 The problem is, if your language has even a *single* impure function, the compiler now has to do
 extensive analysis to prove that your code is pure, before it can apply the above benefits.
 
-However, it is possible to do impure things (like reading/writing a file), while still getting
-all of the benefits of pure code! And that's exactly what Haskell does. This seems like some kind of
-crazy magic trick: how can Haskell remain purely functional, without any impure functions, yet still
+However, it is possible to do impure things (like reading / writing a file), while still getting
+all of the benefits of pure code! And that's exactly what Haskell does. That sounds like some kind of
+crazy magic trick: how can Haskell remain purely functional, without *any* impure functions, yet still
 do impure things? What's the secret?
 
 First, we have to shift our mental perspective. A language like JavaScript *executes* things.
-Consider this program:
+
+Consider this impure JavaScript program:
 
 .. code:: javascript
 
@@ -165,13 +166,13 @@ Our JavaScript programs have a very well-defined *order of execution*: we know f
 will be *executed*.
 
 Execution can have arbitrary side effects: ``foo`` might throw an exception, log to the console,
-read/write a file, etc. That's why the order of execution is so important.
+read / write a file, etc. That's why the order of execution is so important.
 
 In a purely functional language, you don't have execution. Instead, you have *evaluation*.
 Evaluation basically means replacing a more complex thing with a less complex thing, until you
 can't replace it anymore.
 
-Consider this JavaScript program:
+Consider this pure JavaScript program:
 
 .. code:: javascript
 
@@ -222,12 +223,11 @@ So let's write some functions which don't *do* anything, but instead *describe a
     return new Task("error", [x]);
   }
 
-We have created a new type called ``Task``[2]_[3]_, and two functions called ``log`` and
+We have created a new type called ``Task`` [2]_ [3]_, and two functions called ``log`` and
 ``error``.
 
-It's important to understand that the ``log`` function does **not** log to the console:
-it just returns a Task. And so, the ``log`` and ``error`` functions are *pure*, because
-they don't *do* anything.
+It's important to understand that the ``log`` and ``error`` functions don't *do* anything:
+they just return a Task. And so, the ``log`` and ``error`` functions are *pure*.
 
 That means we get **all** of the benefits of pure functions. If the compiler sees this:
 
@@ -237,7 +237,7 @@ That means we get **all** of the benefits of pure functions. If the compiler see
 
 Then it can safely remove it, because the ``log`` function is pure.
 
-Well, that's great and all, but we actually *do* want to log to the console. So let's
+Well, that's great and all, but we *do* actually want to log to the console. So let's
 write an **impure** function which executes a Task:
 
 .. code:: javascript
@@ -267,7 +267,7 @@ So now we can do impure stuff:
   execute(error("bar"));
 
 Rather than using hard-coded strings for each action, let's instead have our Tasks return a
-JavaScript Promise:
+`JavaScript Promise <https://www.promisejs.org/>`_:
 
 .. code:: javascript
 
@@ -289,6 +289,8 @@ JavaScript Promise:
 
 And let's change our ``execute`` function so that it can handle Promises:
 
+.. code:: javascript
+
   function Task_to_Promise(task) {
     return task.fn();
   }
@@ -299,7 +301,7 @@ And let's change our ``execute`` function so that it can handle Promises:
     });
   }
 
-Now let's add in some functions that can read/write from a file:
+Now let's add in some functions that can read / write from a file:
 
 .. code:: javascript
 
@@ -328,6 +330,8 @@ depending on if there is an error or not.
 The ``writeFile`` function is the same, except it uses ``fs.writeFile`` to write
 to a file:
 
+.. code:: javascript
+
   function writeFile(path, x) {
     return new Task(function () {
       return new Promise(function (resolve, reject) {
@@ -347,7 +351,7 @@ milliseconds:
 
 .. code:: javascript
 
-  funcion delay(ms) {
+  function delay(ms) {
     return new Task(function () {
       return new Promise(function (resolve) {
         setTimeout(function () {
@@ -426,7 +430,7 @@ By using this, we can write a function that copies a file:
 The ``copyFile`` function returns a Task. When that Task is executed, it will
 first read from the file, and will then write the file's contents to another file.
 
-Let's add in some logging, so we can see exactly when it reads/writes the file:
+Let's add in some logging, so we can see exactly when it reads / writes the file:
 
 .. code:: javascript
 
@@ -520,7 +524,7 @@ We accomplished all of this by separating *execution* and *evaluation*. In JavaS
 execution can happen at any time. With Tasks, execution only happens with ``main``.
 
 But wait, there's more! Just like with Promises, we can do all kinds of things with Tasks:
-we can store them in arrays/objects, pass them to functions, return them from functions,
+we can store them in arrays / objects, pass them to functions, return them from functions,
 etc.
 
 Consider this function:
