@@ -48,7 +48,7 @@ benefit? On the contrary, there are multiple *significant* benefits to pure func
   we can safely remove it. And now the ``add`` function itself isn't used anywhere, so we can
   remove it too!
 
-  If all functions are pure, then it's really really easy for the compiler to do this.
+  If all functions are pure, then it's *really* easy for the compiler to do this.
 
   But why should you care about this? Imagine that there's some useful library that contains
   a lot of useful functions, but you only want to use a small handful of them. In JavaScript,
@@ -81,12 +81,12 @@ benefit? On the contrary, there are multiple *significant* benefits to pure func
     big libraries.
 
   * The `Google Closure Compiler <https://github.com/google/closure-compiler>`_ with
-    ADVANCED_OPTIMIZATIONS removes a lot of dead code, because it removes dead code even if it
-    *can't* prove that it's pure. This is one of the reasons why ADVANCED_OPTIMIZATIONS breaks a
-    lot of JavaScript libraries.
+    ``ADVANCED_OPTIMIZATIONS`` removes a lot of dead code, because it removes dead code even if it
+    *can't* prove that it's pure. But that means that it can break perfectly valid JavaScript
+    programs.
 
   So, because JavaScript is so impure, your two choices are to either remove very little dead code,
-  or to remove lots of dead code but break perfectly valid programs. Both options are bad.
+  or to remove lots of dead code but break programs. Both options are bad.
 
   But if *all* your code is pure, then the compiler can aggressively remove **all** the dead code,
   and it's *guaranteed* to not break your program. The end result is that you can use lots of big
@@ -110,7 +110,7 @@ benefit? On the contrary, there are multiple *significant* benefits to pure func
     foo(expensive_computation1(), expensive_computation2());
 
   Because JavaScript is impure, the order of execution matters, and so JavaScript will always run
-  ``expensive_computation1()`` first, and afterwards will run ``expensive_computation2()``.
+  ``expensive_computation1()`` first, and afterwards it will run ``expensive_computation2()``.
 
   But if they are pure, then they could be run in any order, and they could even be run in parallel.
   A smart compiler could notice this and *automatically* run your code in parallel for you. It can
@@ -130,6 +130,10 @@ benefit? On the contrary, there are multiple *significant* benefits to pure func
 
   It also allows for cool stuff like Haskell's `QuickCheck <https://en.wikipedia.org/wiki/QuickCheck>`_,
   where you give it a simple specification, and it then *automatically* writes your unit tests.
+
+* Programs become much easier to understand, because pure functions don't have any mutable state.
+  That means you can often look at a single function and understand it, without needing to worry about
+  what other functions are doing.
 
 There are other benefits to pure code, like increased compiler optimizations, laziness, etc. but
 in my opinion they're not as important.
@@ -161,7 +165,7 @@ Consider this impure JavaScript program:
   var y = bar();
   qux(x, y);
 
-Our JavaScript programs have a very well-defined *order of execution*: we know for certain that
+JavaScript programs have a very well-defined *order of execution*: we know for certain that
 ``foo()`` will be *executed* first, and then ``bar()`` will be *executed*, and then ``qux(x, y)``
 will be *executed*.
 
@@ -196,8 +200,8 @@ The same is true for functions:
 
   add(5, mul(10, 15));
 
-It will replace ``mul(10, 15)`` with ``10 * 15``, replace that with ``150``, and then replace
-``add(5, 150)`` with ``5 + 150``, and replace that with ``155``.
+When this program is *evaluated*, it will replace ``mul(10, 15)`` with ``10 * 15``, replace that
+with ``150``, and then replace ``add(5, 150)`` with ``5 + 150``, and replace that with ``155``.
 
 This concept of "replacing things" works because every function is pure, so we can simply take
 the body of the function and replace the arguments with values.
@@ -223,11 +227,11 @@ So let's write some functions which don't *do* anything, but instead *describe a
     return new Task("error", [x]);
   }
 
-We have created a new type called ``Task`` [2]_ [3]_, and two functions called ``log`` and
+We have created a new type called ``Task`` [2]_, and two functions called ``log`` and
 ``error``.
 
 It's important to understand that the ``log`` and ``error`` functions don't *do* anything:
-they just return a Task. And so, the ``log`` and ``error`` functions are *pure*.
+they just return a Task. And so, the ``log`` and ``error`` functions are *pure* [3]_.
 
 That means we get **all** of the benefits of pure functions. If the compiler sees this:
 
@@ -569,13 +573,13 @@ executed from ``main``, rather than having arbitrary execution anywhere.
 .. [1] I/O is short for input / output, and it includes things like reading / writing a file,
        sending / receiving stuff over the internet, printing to the console, etc.
 
-.. [2] A clever reader might point out that because JavaScript has object equality, even if the
+.. [2] In Haskell, the ``Task`` type is called ``IO``.
+
+.. [3] A clever reader might point out that because JavaScript has object equality, even if the
        ``action`` and ``args`` are the same, the ``Task`` object itself is different.
 
        That is correct, but it's also irrelevant to this guide. Haskell has value equality,
        so just pretend that JavaScript has value equality (rather than object equality).
-
-.. [3] In Haskell, the ``Task`` type is called ``IO``.
 
 .. [3] In Haskell, the ``bind`` function is called ``>>=``.
 
