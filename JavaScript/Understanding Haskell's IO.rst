@@ -275,8 +275,8 @@ So now we can do impure stuff:
 
 ----
 
-However, it's annoying that we have to add a new ``} else if (task.action === "...") {`` to
-``execute`` every time we want to add a new Task. So let's change the implementation:
+However, it's annoying that we have to add a new ``} else if (task.action === "...") {``
+every time we want to add a new Task. So let's change the implementation:
 
 .. code:: javascript
 
