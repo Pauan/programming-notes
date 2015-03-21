@@ -281,7 +281,7 @@ every time we want to add a new Task. So let's change the implementation:
 .. code:: javascript
 
   function Task(fn) {
-    this.fn = fn;
+    this.toPromise = fn;
   }
 
   function log(x) {
@@ -304,7 +304,7 @@ Let's change our ``execute`` function so that it can handle Promises:
 .. code:: javascript
 
   function Task_to_Promise(task) {
-    return task.fn();
+    return task.toPromise();
   }
 
   function execute(task) {
