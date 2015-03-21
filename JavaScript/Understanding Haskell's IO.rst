@@ -587,6 +587,9 @@ Similar things can be done with Promises, but Tasks have dead code removal and c
 handling. It's also a lot easier to understand how a program works, because everything is
 executed from ``main``, rather than having arbitrary execution anywhere.
 
+Hopefully now you have a better understanding and appreciation of how Haskell handles I/O in
+a purely functional way.
+
 .. [1] I/O is short for input / output, and it includes things like reading / writing a file,
        sending / receiving stuff over the internet, printing to the console, etc.
 
