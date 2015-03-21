@@ -397,7 +397,7 @@ like as if they were executing in two separate threads. So, let's add in another
     });
   }
 
-The ``bind`` function takes in a Task ``task`` and a function ``f``. The function ``f`` is
+The ``bind``[4]_ function takes in a Task ``task`` and a function ``f``. The function ``f`` is
 supposed to return a Task.
 
 When ``bind`` is executed, it will execute ``task``, and will then call the function ``f`` with
