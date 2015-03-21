@@ -65,25 +65,25 @@ benefit? On the contrary, there are multiple *significant* benefits to pure func
   But if the compiler can automatically remove dead code, then you have a third option:
 
   * Import the big library and just use it. The compiler will automatically remove anything you
-     don't use.
+    don't use.
 
   Okay, so let's just write a dead code remover for JavaScript! There's two major JavaScript
   compilers that can remove dead code:
 
   * The `UglifyJS <https://github.com/mishoo/UglifyJS2>`_ minifier removes dead code, but only if
-     it can prove that the code is pure. Because JavaScript code can have arbitrary side effects,
-     it's *extremely* hard to prove that a particular function is pure.
+    it can prove that the code is pure. Because JavaScript code can have arbitrary side effects,
+    it's *extremely* hard to prove that a particular function is pure.
 
-     Even something as innocent as ``foo.bar`` could have side effects if ``foo`` is a ``Proxy``,
-     or if it has a getter for the ``bar`` property.
+    Even something as innocent as ``foo.bar`` could have side effects if ``foo`` is a ``Proxy``,
+    or if it has a getter for the ``bar`` property.
 
-     So the end result is that it removes very little dead code, and so it's not very useful for
-     big libraries.
+    So the end result is that it removes very little dead code, and so it's not very useful for
+    big libraries.
 
   * The `Google Closure Compiler <https://github.com/google/closure-compiler>`_ with
-     ADVANCED_OPTIMIZATIONS removes a lot of dead code, because it removes dead code even if it
-     *can't* prove that it's pure. This is one of the reasons why ADVANCED_OPTIMIZATIONS breaks a
-     lot of JavaScript libraries.
+    ADVANCED_OPTIMIZATIONS removes a lot of dead code, because it removes dead code even if it
+    *can't* prove that it's pure. This is one of the reasons why ADVANCED_OPTIMIZATIONS breaks a
+    lot of JavaScript libraries.
 
   So, because JavaScript is so impure, your two choices are to either remove very little dead code,
   or to remove lots of dead code but break perfectly valid programs. Both options are bad.
@@ -451,7 +451,7 @@ Gosh that's awfully verbose. So let's add in some syntax sugar:
   function copyFile(from, to) {
     return do {
       log("Reading file " + from);
-      file = readFile(from);
+      file <- readFile(from);
       log("Writing file " + to);
       writeFile(to, file);
     }
@@ -496,7 +496,7 @@ every program must have a global variable called ``main``, and that variable mus
 
   // Task that reads the file "foo" and then logs it to the console
   var main = do {
-    file = readFile("foo");
+    file <- readFile("foo");
     log(file);
   }
 
