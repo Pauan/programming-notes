@@ -303,12 +303,14 @@ Let's change our ``execute`` function so that it can handle Promises:
 
 .. code:: javascript
 
+  // Converts a Task to a JavaScript Promise
   function Task_to_Promise(task) {
     return task.toPromise();
   }
 
   function execute(task) {
     Task_to_Promise(task).catch(function (e) {
+      // If the Task throws an error, log it to the console
       console.error(e.stack);
     });
   }
