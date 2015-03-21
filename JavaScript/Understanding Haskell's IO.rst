@@ -581,7 +581,7 @@ executed from ``main``, rather than having arbitrary execution anywhere.
        That is correct, but it's also irrelevant to this guide. Haskell has value equality,
        so just pretend that JavaScript has value equality (rather than object equality).
 
-.. [3] In Haskell, the ``bind`` function is called ``>>=``.
+.. [4] In Haskell, the ``bind`` function is called ``>>=``.
 
        In this guide I focused solely on the ``IO`` type, but the ``>>=``
        function actually works on all monads. ``IO`` is just one of many
