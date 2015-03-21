@@ -210,7 +210,10 @@ So we have this big difference, between *evaluation* and *execution*. In JavaScr
 concepts are intermingled together. But pure functions have no concept of execution at all,
 they only have the concept of evaluation.
 
-So let's write some functions which don't *do* anything, but instead *describe an action*:
+----
+
+Let's start by writing some functions which don't *do* anything, but instead *describe an
+action*:
 
 .. code :: javascript
 
