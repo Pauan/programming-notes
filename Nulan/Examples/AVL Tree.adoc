@@ -16,11 +16,11 @@
   (depth :: (FORALL Key Value
               (-> (Tree Key Value) Integer)))
 
-  (depth (*nil))
-    0
-
   (depth (*tree x))
-    x.depth)
+    x.depth
+
+  (depth (*nil))
+    0)
 
 
 (FUNCTION
@@ -28,11 +28,11 @@
              (-> (Tree Key Value)
                  (Tree Key Value))))
 
-  (left (*nil))
-    (fail)
-
   (left (*tree x))
-    x.left)
+    x.left
+
+  (left (*nil))
+    (fail))
 
 
 (FUNCTION
@@ -40,39 +40,67 @@
               (-> (Tree Key Value)
                   (Tree Key Value))))
 
-  (right (*nil))
-    (fail)
-
   (right (*tree x))
-    x.right)
+    x.right
+
+  (right (*nil))
+    (fail))
 
 
 (FUNCTION
-  (children :: (FORALL Key Value
+  (set-left :: (FORALL Key Value
                  (-> (Tree Key Value)
-                     (Tree Key Value)
                      (Tree Key Value)
                      (Tree Key Value))))
 
-  (children (*nil) _ _)
-    (fail)
+  (set-left (*tree x) l)
+    (*tree { @x left = l })
 
-  (children (*tree x) l r)
+  (set-left (*nil) _)
+    (fail))
+
+
+(FUNCTION
+  (set-right :: (FORALL Key Value
+                  (-> (Tree Key Value)
+                      (Tree Key Value)
+                      (Tree Key Value))))
+
+  (set-right (*tree x) r)
+    (*tree { @x right = r })
+
+  (set-right (*nil) _)
+    (fail))
+
+
+(FUNCTION
+  (set-children :: (FORALL Key Value
+                     (-> (Tree Key Value)
+                         (Tree Key Value)
+                         (Tree Key Value)
+                         (Tree Key Value))))
+
+  (set-children (*tree x) l r)
     (*tree { @x left  = l
-                right = r }))
+                right = r })
+
+  (set-children (*nil) _ _)
+    (fail))
 
 
 (FUNCTION
   (balance :: (FORALL Key Value
                 (-> (Tree Key Value)
+                    (Tree Key Value)
+                    (Tree Key Value)
                     (Tree Key Value))))
 
   (balance (*nil))
     (*nil)
 
-  (balance (*tree node))
-    (LET l = node.left
-         r = node.right
+  (balance node)
+    (LET l = (left node)
+         r = (right node)
          l-depth = (depth l)
          r-depth = (depth r)
 
@@ -81,30 +109,34 @@
         (LET rl = (left r)
              ll = (left l)
 
-          (IF (more? (depth rl) (depth ll))
+          (IF (more? (depth rl)
+                     (depth ll))
+
             (LET lrl = (left (right l))
                  rrl = (left (right r))
 
               # Left rotate -> Right rotate
-              (children rl (children l ll lrl) (children node rrl r)))
+              (set-children rl (set-right l lrl) (set-left node rrl)))
 
             # Right rotate
-            (children l ll (children node rl r))))
+            (set-right l (set-left node rl))))
 
         # Right side is deeper
         (IF (more? r-depth (add l-depth 1))
           (LET lr = (right l)
                rr = (right r)
 
-            (IF (more? (depth lr) (depth rr))
+            (IF (more? (depth lr)
+                       (depth rr))
+
               (LET llr = (right (left l))
                    rlr = (right (left r))
 
                 # Right rotate -> Left rotate
-                (children lr (children node l llr) (children r rlr rr)))
+                (set-children lr (set-right node llr) (set-left r rlr)))
 
               # Left rotate
-              (children r (children node l lr) rr)))
+              (set-left r (set-right node lr))))
 
           # No balancing needed
           node))))
@@ -124,12 +156,8 @@
 
   (concat x y)
     # TODO what if the depths are the same ?
-    (IF (less? (depth x) (depth y))
-      (LET l = (left y)
-           r = (right y)
-        (balance (children y (concat x l) r)))
-
-      (LET l = (left x)
-           r = (right x)
-        (balance (children x l (concat r y))))))
+    (IF (less? (depth x)
+               (depth y))
+      (balance (set-left  y (concat x (left y))))
+      (balance (set-right x (concat (right x) y)))))
 ----
