@@ -198,10 +198,10 @@
           (*something node.value)
 
         (*less)
-          (has? node.left key)
+          (get node.left key)
 
         (*more)
-          (has? node.right key))
+          (get node.right key))
 
 
     (set (*nil) key value)
