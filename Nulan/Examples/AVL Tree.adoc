@@ -3,161 +3,292 @@
 (FLAG+ "require-annotations")
 
 
-(TYPE (Tree Key Value)
-  (*nil)
-  (*tree { left = (Tree Key Value)
-           right = (Tree Key Value)
-           key = Key
-           value = Value
-           depth = Integer }))
+(TYPE Comparison
+  (*less)
+  (*equal)
+  (*more))
+
+
+(INTERFACE A
+  (compare :: (-> A A Comparison)))
 
 
 (FUNCTION
-  (depth :: (FORALL Key Value
-              (-> (Tree Key Value) Integer)))
+  (more? :: (FORALL A
+              (-> A A Boolean)))
 
-  (depth (*tree x))
-    x.depth
-
-  (depth (*nil))
-    0)
-
-
-(FUNCTION
-  (left :: (FORALL Key Value
-             (-> (Tree Key Value)
-                 (Tree Key Value))))
-
-  (left (*tree x))
-    x.left
-
-  (left (*nil))
-    (fail))
+  (more? x y)
+    (MATCH (compare x y)
+      (*more)
+        (*true)
+      _
+        (*false)))
 
 
 (FUNCTION
-  (right :: (FORALL Key Value
-              (-> (Tree Key Value)
-                  (Tree Key Value))))
+  (less? :: (FORALL A
+              (-> A A Boolean)))
 
-  (right (*tree x))
-    x.right
-
-  (right (*nil))
-    (fail))
-
-
-(FUNCTION
-  (set-left :: (FORALL Key Value
-                 (-> (Tree Key Value)
-                     (Tree Key Value)
-                     (Tree Key Value))))
-
-  (set-left (*tree x) l)
-    (*tree { @x left = l })
-
-  (set-left (*nil) _)
-    (fail))
+  (less? x y)
+    (MATCH (compare x y)
+      (*less)
+        (*true)
+      _
+        (*false)))
 
 
 (FUNCTION
-  (set-right :: (FORALL Key Value
-                  (-> (Tree Key Value)
-                      (Tree Key Value)
-                      (Tree Key Value))))
+  (equal? :: (FORALL A
+               (-> A A Boolean)))
 
-  (set-right (*tree x) r)
-    (*tree { @x right = r })
+  (equal? x y)
+    (MATCH (compare x y)
+      (*equal)
+        (*true)
+      _
+        (*false)))
+----
 
-  (set-right (*nil) _)
-    (fail))
+[source]
+----
+(FLAG+ "require-annotations")
+
+
+# Binary tree
+(INTERFACE A
+  (empty? :: (-> A Boolean))
+  (left :: (-> A A))
+  (right :: (-> A A))
+  (set-children :: (-> A A A A)))
+
+
+# AVL tree
+(INTERFACE A
+  (depth :: (-> A Integer)))
 
 
 (FUNCTION
-  (set-children :: (FORALL Key Value
-                     (-> (Tree Key Value)
-                         (Tree Key Value)
-                         (Tree Key Value)
-                         (Tree Key Value))))
+  (set-balanced :: (FORALL A
+                     (-> A A A A)))
 
-  (set-children (*tree x) l r)
-    (*tree { @x left  = l
-                right = r })
-
-  (set-children (*nil) _ _)
-    (fail))
-
-
-(FUNCTION
-  (balance :: (FORALL Key Value
-                (-> (Tree Key Value)
-                    (Tree Key Value)
-                    (Tree Key Value)
-                    (Tree Key Value))))
-
-  (balance (*nil))
-    (*nil)
-
-  (balance node)
-    (LET l = (left node)
-         r = (right node)
-         l-depth = (depth l)
+  (set-balanced node l r)
+    (LET l-depth = (depth l)
          r-depth = (depth r)
 
       # Left side is deeper
       (IF (more? l-depth (add r-depth 1))
-        (LET rl = (left r)
-             ll = (left l)
+        (LET ll = (left l)
+             lr = (right l)
 
-          (IF (more? (depth rl)
+          (IF (more? (depth lr)
                      (depth ll))
 
-            (LET lrl = (left (right l))
-                 rrl = (left (right r))
+            (LET lrl = (left lr)
+                 lrr = (right lr)
 
               # Left rotate -> Right rotate
-              (set-children rl (set-right l lrl) (set-left node rrl)))
+              (set-children lr (set-children l ll lrl)
+                               (set-children node lrr r)))
 
             # Right rotate
-            (set-right l (set-left node rl))))
+            (set-children l ll (set-children node lr r))))
 
         # Right side is deeper
         (IF (more? r-depth (add l-depth 1))
-          (LET lr = (right l)
+          (LET rl = (left r)
                rr = (right r)
 
-            (IF (more? (depth lr)
+            (IF (more? (depth rl)
                        (depth rr))
 
-              (LET llr = (right (left l))
-                   rlr = (right (left r))
+              (LET rll = (left rl)
+                   rlr = (right rl)
 
                 # Right rotate -> Left rotate
-                (set-children lr (set-right node llr) (set-left r rlr)))
+                (set-children lr (set-children node l rll)
+                                 (set-children r rlr rr)))
 
               # Left rotate
-              (set-left r (set-right node lr))))
+              (set-children r (set-children node l rl) rr)))
 
           # No balancing needed
-          node))))
+          (set-children node l r)))))
 
 
 (FUNCTION
-  (concat :: (FORALL Key Value
-               (-> (Tree Key Value)
-                   (Tree Key Value)
-                   (Tree Key Value))))
-
-  (concat x (*nil))
-    x
-
-  (concat (*nil) y)
-    y
+  (concat :: (FORALL A
+               (-> A A A)))
 
   (concat x y)
-    # TODO what if the depths are the same ?
-    (IF (less? (depth x)
-               (depth y))
-      (balance (set-left  y (concat x (left y))))
-      (balance (set-right x (concat (right x) y)))))
+    (IF (empty? x)
+      y
+      (IF (empty? y)
+        x
+        # TODO what if the depths are the same ?
+        (IF (less? (depth x)
+                   (depth y))
+          (set-balanced y (concat x (left y)) (right y))
+          (set-balanced x (left x) (concat (right x) y))))))
+
+
+(FUNCTION
+  (insert-min :: (FORALL A
+                   (-> A A A)))
+
+  (insert-min node new)
+    (IF (empty? node)
+      new
+      (set-balanced node (insert-min (left node) new) (right node))))
+
+
+(FUNCTION
+  (insert-max :: (FORALL A
+                   (-> A A A)))
+
+  (insert-max node new)
+    (IF (empty? node)
+      new
+      (set-balanced node (left node) (insert-max (right node) new))))
+
+
+(EXPORT { Dict get set remove has? }
+
+  (INTERFACE A
+    (get :: (FORALL Key Value
+              (-> (A Key Value) Key (Maybe Value))))
+
+    (set :: (FORALL Key Value
+              (-> (A Key Value) Key Value (A Key Value))))
+
+    (remove :: (FORALL Key Value
+                 (-> (A Key Value) Key (A Key Value)))))
+
+
+  (FUNCTION
+    (has? :: (FORALL A Key Value
+               (-> (A Key Value) Key Boolean)))
+
+    (has? dict key)
+      (MATCH (get dict key)
+        (*nothing)
+          (*false)
+
+        (*something _)
+          (*true)))
+
+
+  (TYPE (Dict Key Value)
+    (*nil)
+    (*tree { left = (Dict Key Value)
+             right = (Dict Key Value)
+             key = Key
+             value = Value
+             depth = Integer }))
+
+
+  (IMPLEMENT (FORALL Key Value
+               (Dict Key Value))
+
+    (get (*nil) _)
+      (*nothing)
+
+    (get (*tree node) key)
+      (MATCH (compare key node.key)
+        (*equal)
+          (*something node.value)
+
+        (*less)
+          (has? node.left key)
+
+        (*more)
+          (has? node.right key))
+
+
+    (set (*nil) key value)
+      (*tree { left = (*nil)
+               right = (*nil)
+               key = key
+               value = value
+               depth = 1 })
+
+    (set node key value)
+      (LET (*tree x) = node
+        (MATCH (compare key x.key)
+          (*equal)
+            (*tree { @x key = key
+                        value = value })
+
+          (*less)
+            (set-balanced node
+              (set x.left key value)
+              x.right)
+
+          (*more)
+            (set-balanced node
+              x.left
+              (set x.right key value))))
+
+
+    (remove (*nil) _)
+      (*nil)
+
+    (remove node key)
+      (LET (*tree x) = node
+        (MATCH (compare key x.key)
+          (*equal)
+            (concat x.left x.right)
+
+          (*less)
+            (set-balanced node
+              (remove x.left key)
+              x.right)
+
+          (*more)
+            (set-balanced node
+              x.left
+              (remove x.right key))))
+
+
+    (empty? (*nil))
+      (*true)
+
+    (empty? (*tree _))
+      (*false)
+
+
+    (left (*tree x))
+      x.left
+
+    (left (*nil))
+      (FAIL)
+
+
+    (right (*tree x))
+      x.right
+
+    (right (*nil))
+      (FAIL)
+
+
+    (set-children (*tree x) l r)
+      (LET d = (max (depth l)
+                    (depth r))
+        (*tree { @x left  = l
+                    right = r
+                    depth = (add d 1) }))
+
+    (set-children (*nil) _ _)
+      (FAIL)
+
+
+    (depth (*tree x))
+      x.depth
+
+    (depth (*nil))
+      0))
+
+
+(EXPORT { Sorted-Dict }
+  (TYPE (Sorted-Dict Key Value)
+    (*sorted (-> Key Key Comparison) (Dict Key Value))))
 ----
