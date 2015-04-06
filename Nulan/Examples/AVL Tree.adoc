@@ -1,0 +1,135 @@
+[source]
+----
+(FLAG+ "require-annotations")
+
+
+(TYPE (Tree Key Value)
+  (*nil)
+  (*tree { left = (Tree Key Value)
+           right = (Tree Key Value)
+           key = Key
+           value = Value
+           depth = Integer }))
+
+
+(FUNCTION
+  (depth :: (FORALL Key Value
+              (-> (Tree Key Value) Integer)))
+
+  (depth (*nil))
+    0
+
+  (depth (*tree x))
+    x.depth)
+
+
+(FUNCTION
+  (left :: (FORALL Key Value
+             (-> (Tree Key Value)
+                 (Tree Key Value))))
+
+  (left (*nil))
+    (fail)
+
+  (left (*tree x))
+    x.left)
+
+
+(FUNCTION
+  (right :: (FORALL Key Value
+              (-> (Tree Key Value)
+                  (Tree Key Value))))
+
+  (right (*nil))
+    (fail)
+
+  (right (*tree x))
+    x.right)
+
+
+(FUNCTION
+  (children :: (FORALL Key Value
+                 (-> (Tree Key Value)
+                     (Tree Key Value)
+                     (Tree Key Value)
+                     (Tree Key Value))))
+
+  (children (*nil) _ _)
+    (fail)
+
+  (children (*tree x) l r)
+    (*tree { @x left  = l
+                right = r }))
+
+
+(FUNCTION
+  (balance :: (FORALL Key Value
+                (-> (Tree Key Value)
+                    (Tree Key Value))))
+
+  (balance (*nil))
+    (*nil)
+
+  (balance (*tree node))
+    (LET l = node.left
+         r = node.right
+         l-depth = (depth l)
+         r-depth = (depth r)
+
+      # Left side is deeper
+      (IF (more? l-depth (+ r-depth 1))
+        (LET rl = (left r)
+             ll = (left l)
+
+          (IF (more? (depth rl) (depth ll))
+            (LET lrl = (left (right l))
+                 rrl = (left (right r))
+
+              # Left rotate -> Right rotate
+              (children rl (children l ll lrl) (children node rrl r)))
+
+            # Right rotate
+            (children l ll (children node rl r))))
+
+        # Right side is deeper
+        (IF (more? r-depth (+ l-depth 1))
+          (LET lr = (right l)
+               rr = (right r)
+
+            (IF (more? (depth lr) (depth rr))
+              (LET llr = (right (left l))
+                   rlr = (right (left r))
+
+                # Right rotate -> Left rotate
+                (children lr (children node l llr) (children r rlr rr)))
+
+              # Left rotate
+              (children r (children node l lr) rr)))
+
+          # No balancing needed
+          node))))
+
+
+(FUNCTION
+  (concat :: (FORALL Key Value
+               (-> (Tree Key Value)
+                   (Tree Key Value)
+                   (Tree Key Value))))
+
+  (concat x (*nil))
+    x
+
+  (concat (*nil) y)
+    y
+
+  (concat x y)
+    # TODO what if the depths are the same ?
+    (IF (less? (depth x) (depth y))
+      (LET l = (left y)
+           r = (right y)
+        (balance (children y (concat x l) r)))
+
+      (LET l = (left x)
+           r = (right x)
+        (balance (children x l (concat r y))))))
+----
