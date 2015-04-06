@@ -77,7 +77,7 @@
          r-depth = (depth r)
 
       # Left side is deeper
-      (IF (more? l-depth (+ r-depth 1))
+      (IF (more? l-depth (add r-depth 1))
         (LET rl = (left r)
              ll = (left l)
 
@@ -92,7 +92,7 @@
             (children l ll (children node rl r))))
 
         # Right side is deeper
-        (IF (more? r-depth (+ l-depth 1))
+        (IF (more? r-depth (add l-depth 1))
           (LET lr = (right l)
                rr = (right r)
 
