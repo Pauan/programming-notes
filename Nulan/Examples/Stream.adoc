@@ -1,0 +1,319 @@
+[source,javascript]
+Stream.js
+----
+function check_length(i) {
+  // TODO should we allow for a buffer of size 0 ?
+  if (i < 1) {
+    throw new Error("Expected 1 or greater but got " + i);
+  }
+}
+
+function reject(a, err) {
+  for (var i = 0; i < a["length"]; ++i) {
+    a[i].reject(err);
+  }
+}
+
+function add_puller(stream) {
+  return new Promise(function (resolve, reject) {
+    stream.pullers["push"]({
+      resolve: resolve,
+      reject: reject
+    });
+  });
+}
+
+function add_pusher(stream, value) {
+  return new Promise(function (resolve, reject) {
+    stream.pushers["push"]({
+      resolve: resolve,
+      reject: reject,
+      value: value
+    });
+  });
+}
+
+function stream_buffer_push(stream, value) {
+  // If there is a pending pull
+  if (stream.pullers["length"]) {
+    stream.pullers["shift"]().resolve(value);
+
+  // If there is room in the buffer
+  } else if (stream.buffer["length"] < stream.limit) {
+    stream.buffer["push"](value);
+
+  // Buffer is full
+  } else {
+    return stream.full(stream, value);
+  }
+}
+
+
+function stream_pull(stream) {
+  if (stream.pushers["length"]) {
+    var f = stream.pushers["shift"]();
+    f.resolve();
+    return f.value;
+
+  } else {
+    return add_puller(stream);
+  }
+}
+
+function stream_push(stream, value) {
+  if (stream.pullers["length"]) {
+    stream.pullers["shift"]().resolve(value);
+
+  } else {
+    return add_pusher(stream, value);
+  }
+}
+
+function stream_error(stream, err) {
+  reject(stream.pullers, err);
+  reject(stream.pushers, err);
+  stream.pullers = null;
+  stream.pushers = null;
+}
+
+export function stream() {
+  return function () {
+    return {
+      pullers: [],
+      pushers: [],
+
+      pull: stream_pull,
+      push: stream_push,
+      error: stream_error
+    };
+  };
+}
+
+
+var stream_fixed_full = add_pusher;
+
+function stream_fixed_pull(stream) {
+  // If there is stuff in the buffer
+  if (stream.buffer["length"]) {
+    var value = stream.buffer["shift"]();
+
+    // If there is a pending push
+    if (stream.pushers["length"]) {
+      var f = stream.pushers["shift"]();
+      stream.buffer["push"](f.value);
+      f.resolve();
+    }
+
+    return value;
+
+  // Buffer is empty, wait for push
+  } else {
+    return add_puller(stream);
+  }
+}
+
+function stream_fixed_error(stream, err) {
+  stream_error(stream, err);
+  stream.buffer = null;
+}
+
+export function stream_fixed(i) {
+  check_length(i);
+  return function () {
+    return {
+      limit: i,
+      buffer: [],
+      pullers: [],
+      pushers: [],
+
+      full: stream_fixed_full,
+      pull: stream_fixed_pull,
+      push: stream_buffer_push,
+      error: stream_fixed_error
+    };
+  };
+}
+
+
+function stream_sliding_pull(stream) {
+  if (stream.buffer["length"]) {
+    return stream.buffer["shift"]();
+
+  } else {
+    return add_puller(stream);
+  }
+}
+
+function stream_sliding_full(stream, value) {
+  stream.buffer["shift"]();
+  stream.buffer["push"](value);
+}
+
+function stream_sliding_error(stream, err) {
+  reject(stream.pullers, err);
+  stream.pullers = null;
+  stream.buffer = null;
+}
+
+export function stream_sliding(i) {
+  check_length(i);
+  return function () {
+    return {
+      limit: i,
+      buffer: [],
+      pullers: [],
+
+      full: stream_sliding_full,
+      pull: stream_sliding_pull,
+      push: stream_buffer_push,
+      error: stream_sliding_error
+    };
+  };
+}
+
+
+var stream_dropping_pull = stream_sliding_pull;
+var stream_dropping_error = stream_sliding_error;
+
+function stream_dropping_full(stream, value) {
+  stream.buffer[stream.buffer["length"] - 1] = value;
+}
+
+export function stream_dropping(i) {
+  check_length(i);
+  return function () {
+    return {
+      limit: i,
+      buffer: [],
+      pullers: [],
+
+      full: stream_dropping_full,
+      pull: stream_dropping_pull,
+      push: stream_buffer_push,
+      error: stream_dropping_error
+    };
+  };
+}
+
+
+export function pull(stream) {
+  return function () {
+    return stream.pull(stream);
+  };
+}
+
+export function push(stream, value) {
+  return function () {
+    return stream.push(stream, value);
+  };
+}
+
+export function error(stream, err) {
+  return function () {
+    stream.error(stream, err);
+
+    stream.pull = stream.push = stream.error = function () {
+      throw err;
+    };
+
+    // TODO is this correct ?
+    throw err;
+  };
+}
+----
+
+[source]
+Stream.nu
+----
+(EXPORT { Stream stream
+          stream/fixed = stream_fixed
+          stream/sliding = stream_sliding
+          stream/dropping = stream_dropping
+          pull! = pull
+          push! = push
+          stream/error! = error }
+
+  (TYPE (Stream A))
+
+  (FFI-IMPORT "Stream"
+    (stream :: (FORALL A
+                 (-> (Task (Stream A)))))
+    (stream_fixed :: (FORALL A
+                       (-> Integer (Task (Stream A)))))
+    (stream_sliding :: (FORALL A
+                         (-> Integer (Task (Stream A)))))
+    (stream_dropping :: (FORALL A
+                          (-> Integer (Task (Stream A)))))
+    (pull :: (FORALL A
+               (-> (Stream A) (Task A))))
+    (push :: (FORALL A
+               (-> (Stream A) A (Task Void))))
+    (error :: (FORALL A
+                (-> (Stream A) Error (Task Void))))))
+
+(FUNCTION
+  (stream/make :: (FORALL A
+                    (-> (-> (Stream A) (Task Void))
+                        (Task (Stream A)))))
+  (stream/make f)
+    (DO out = (stream)
+        (detached (f out))
+        (wrap out)))
+
+(FUNCTION
+  (stream/merge :: (FORALL A
+                     (-> @(Stream A) (Task (Stream A)))))
+  (stream/merge @in)
+    (stream/make -> out
+      (concurrent
+        @(map in -> in
+           (forever
+             (DO value = (pull! in)
+                 (push! out)))))))
+
+(FUNCTION
+  (stream/map :: (FORALL A B
+                   (-> (Stream A) (-> A B) (Task (Stream B)))))
+  (stream/map in f)
+    (stream/make -> out
+      (forever
+        (DO value = (pull! in)
+            (push! out (f value))))))
+
+(FUNCTION
+  (stream/foldl :: (FORALL A B
+                     (-> A (Stream B) (-> A B (Task A)) (Task Void))))
+  (stream/foldl init s f)
+    (LOOP next
+        | old = init
+      (DO value = (pull! s)
+          new = (f old value)
+          (next new))))
+----
+
+[source]
+Examples
+----
+(DO # Lazily generates the stream [0 1 2 3 4 ...]
+    x = (stream/make -> out
+          (LOOP next
+              | i = 0
+            (DO (push! out i)
+                (next (add i 1)))))
+
+    # Lazily generates the stream [1 2 4 8 16 ....]
+    y = (stream/make -> out
+          (LOOP next
+              | i = 1
+            (DO (push! out i)
+                (next (multiply i 2)))))
+
+    # Merges the two streams in a non-deterministic fashion
+    z = (stream/merge x y)
+
+    # Accumulates and logs the sum of the merged stream
+    (stream/foldl 0 z -> old value
+      (LET new = (add old value)
+        (DO (log new)
+            (wrap new)))))
+----
