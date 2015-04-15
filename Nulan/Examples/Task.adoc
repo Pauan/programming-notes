@@ -75,14 +75,13 @@ export function _bind(task, f) {
 .Task.nu
 [source]
 ----
-(EXPORT { Task
-          finally = _finally
+(TYPE (Task A))
+
+(EXPORT { finally = _finally
           catch = _catch
           detached
           concurrent
           ignore }
-
-  (TYPE (Task A))
 
   (FFI-IMPORT "Task"
     (execute :: (FORALL A

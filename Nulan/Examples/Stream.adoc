@@ -226,15 +226,15 @@ export function error(stream, err) {
 .Stream.nu
 [source]
 ----
-(EXPORT { Stream stream
+(TYPE (Stream A))
+
+(EXPORT { stream
           stream/fixed = stream_fixed
           stream/sliding = stream_sliding
           stream/dropping = stream_dropping
           pull! = pull
           push! = push
           stream/error! = error }
-
-  (TYPE (Stream A))
 
   (FFI-IMPORT "Stream"
     (stream :: (FORALL A
