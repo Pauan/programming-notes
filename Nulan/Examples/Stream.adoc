@@ -226,7 +226,6 @@ export function error(stream, err) {
 .Stream.nu
 [source]
 ----
-
 (EXPORT { Stream stream
           stream/fixed = stream_fixed
           stream/sliding = stream_sliding
@@ -296,7 +295,6 @@ export function error(stream, err) {
 .Examples
 [source]
 ----
-
 (DO # Lazily generates the stream [0 1 2 3 4 ...]
     x = (stream/make -> out
           (LOOP next
