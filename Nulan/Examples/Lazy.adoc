@@ -1,0 +1,30 @@
+.Lazy.js
+[source,javascript]
+----
+function lazy(f) {
+  return {
+    forced: false,
+    thunk: f
+  };
+}
+
+function force(x) {
+  if (!x.forced) {
+    x.thunk = x.thunk();
+    x.forced = true;
+  }
+  return x.thunk;
+}
+----
+
+.Lazy.nu
+[source]
+----
+(TYPE (Lazy A))
+
+(FFI-IMPORT "Lazy"
+  (lazy :: (FORALL A
+             (-> (-> A) (Lazy A))))
+  (force :: (FORALL A
+              (-> (Lazy A) A))))
+----
