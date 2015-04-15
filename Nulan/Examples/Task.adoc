@@ -1,0 +1,122 @@
+.Task.js
+[source,javascript]
+----
+function Promise_from_Task(task) {
+  return new Promise(function (resolve) {
+    resolve(task());
+  });
+}
+
+export function execute(task) {
+  Promise_from_Task(task)["catch"](function (e) {
+    console["error"](e["stack"]);
+  });
+}
+
+// TODO is there a faster implementation of this ?
+export function _finally(before, after) {
+  return function () {
+    var out = Promise_from_Task(before);
+
+    function run(_) {
+      return Promise_from_Task(after)["then"](function (_) {
+        return out;
+      });
+    }
+
+    return out["then"](run, run);
+  };
+}
+
+export function _catch(task, f) {
+  return function () {
+    return Promise_from_Task(task)["catch"](function (e) {
+      return Promise_from_Task(f(e));
+    });
+  };
+}
+
+export function detached(task) {
+  return function () {
+    execute(task);
+  };
+}
+
+export function concurrent(a) {
+  return function () {
+    // TODO is there a faster implementation of this ?
+    return Promise["all"](a["map"](Promise_from_Task));
+  };
+}
+
+// This can be implemented purely with bind + wrap,
+// but it's more efficient to implement it with the FFI
+export function ignore(task) {
+  return function () {
+    return Promise_from_Task(task)["then"](function (_) {});
+  };
+};
+
+export function _wrap(x) {
+  return function () {
+    return x;
+  };
+}
+
+export function _bind(task, f) {
+  return function () {
+    return Promise_from_Task(task)["then"](function (x) {
+      return Promise_from_Task(f(x));
+    });
+  };
+}
+----
+
+.Task.nu
+[source]
+----
+(EXPORT { Task
+          finally = _finally
+          catch = _catch
+          detached
+          concurrent
+          ignore }
+
+  (TYPE (Task A))
+
+  (FFI-IMPORT "Task"
+    (execute :: (FORALL A
+                  (-> (Task Void) Void)))
+
+    (ignore :: (FORALL A
+                 (-> (Task A) (Task Void))))
+
+    (_wrap :: (FORALL A
+                (-> A (Task A))))
+
+    (_bind :: (FORALL A B
+                (-> (Task A) (-> A (Task B)) (Task B))))
+
+    (_finally :: (FORALL A
+                   (-> (Task A) (Task Void) (Task A))))
+
+    (_catch :: (FORALL A
+                 (-> (Task A) (-> Error (Task A)) (Task A))))
+
+    (detached :: (-> (Task Void) (Task Void)))
+
+    (concurrent :: (FORALL A
+                     (-> @(Task A) (Task (List A))))))
+
+  # TODO is there a better way of handling this ?
+  (MACRO
+    (FFI-PROGRAM-START)
+      `(execute (,(symbol "main"))))
+
+  (IMPLEMENT Task
+    (wrap x)
+      (_wrap x)
+
+    (bind x f)
+      (_bind x f)))
+----
