@@ -239,16 +239,22 @@ export function error(stream, err) {
   (FFI-IMPORT "Stream"
     (stream :: (FORALL A
                  (-> (Task (Stream A)))))
+
     (stream_fixed :: (FORALL A
                        (-> Integer (Task (Stream A)))))
+
     (stream_sliding :: (FORALL A
                          (-> Integer (Task (Stream A)))))
+
     (stream_dropping :: (FORALL A
                           (-> Integer (Task (Stream A)))))
+
     (pull :: (FORALL A
                (-> (Stream A) (Task A))))
+
     (push :: (FORALL A
                (-> (Stream A) A (Task Void))))
+
     (error :: (FORALL A
                 (-> (Stream A) Error (Task Void))))))
 
@@ -258,7 +264,8 @@ export function error(stream, err) {
                         (Task (Stream A)))))
   (stream/make f)
     (DO out = (stream)
-        (detached (f out))
+        # TODO is it a good idea to use ignore here ?
+        (detached (ignore (f out)))
         (wrap out)))
 
 (FUNCTION
