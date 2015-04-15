@@ -259,8 +259,8 @@ export function error(stream, err) {
                 (-> (Stream A) Error (Task Void))))))
 
 (FUNCTION
-  (stream/make :: (FORALL A
-                    (-> (-> (Stream A) (Task Void))
+  (stream/make :: (FORALL A B
+                    (-> (-> (Stream A) (Task B))
                         (Task (Stream A)))))
   (stream/make f)
     (DO out = (stream)

@@ -119,4 +119,10 @@ export function _bind(task, f) {
 
     (bind x f)
       (_bind x f)))
+
+(FUNCTION
+  (forever :: (-> (Task Void) (Task Void)))
+  (forever task)
+    (DO task
+        (forever task)))
 ----
