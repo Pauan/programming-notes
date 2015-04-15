@@ -1,6 +1,6 @@
+.Stream.js
 [source,javascript]
 ----
-// Stream.js
 
 function check_length(i) {
   // TODO should we allow for a buffer of size 0 ?
@@ -223,9 +223,9 @@ export function error(stream, err) {
 }
 ----
 
+.Stream.nu
 [source]
 ----
-# Stream.nu
 
 (EXPORT { Stream stream
           stream/fixed = stream_fixed
@@ -293,9 +293,9 @@ export function error(stream, err) {
           (next new))))
 ----
 
+.Examples
 [source]
 ----
-# Examples
 
 (DO # Lazily generates the stream [0 1 2 3 4 ...]
     x = (stream/make -> out
