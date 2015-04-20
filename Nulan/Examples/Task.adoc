@@ -2,330 +2,421 @@
 [source,javascript]
 ----
 class Task {
-  constructor() {
+  constructor(f, onSuccess, onError) {
+    this._pending = true;
+    this._onSuccess = onSuccess;
+    this._onError = onError;
+    this.onCancel = null;
+
+    f(this);
+  }
+
+  success(value) {
+    if (this._pending) {
+      var f = this._onSuccess;
+
+      this._pending = false;
+      this._onSuccess = null;
+      this._onError = null;
+      this.onCancel = null;
+
+      f(value);
+    }
+  }
+
+  error(e) {
+    if (this._pending) {
+      var f = this._onError;
+
+      this._pending = false;
+      this._onSuccess = null;
+      this._onError = null;
+      this.onCancel = null;
+
+      f(e);
+    }
+  }
+
+  cancel() {
+    if (this._pending) {
+      var f = this.onCancel;
+
+      this._pending = false;
+      this._onSuccess = null;
+      this._onError = null;
+      this.onCancel = null; // TODO what if somebody sets onCancel after the Task is cancelled ?
+
+      if (f !== null) {
+        f();
+      }
+    }
+  }
+}
+
+
+class Thread {
+  constructor(task) {
     // 0 is pending
     // 1 is succeeded
     // 2 is errored
     // 3 is cancelled
     this._state = 0;
     this._value = null;
-    this._onsuccess = null;
-    this._onerror = null;
-    this._oncancel = null;
+    this._listeners = [];
+
+    this._task = new Task(task, (value) => {
+      if (this._state === 0) {
+        this._state = 1;
+        this._value = value;
+
+        // TODO this can be made a bit faster
+        this._listeners["forEach"](function (x) {
+          x.success(value);
+        });
+
+        this._listeners = null;
+      }
+
+    }, (e) => {
+      if (this._state === 0) {
+        this._state = 2;
+        this._value = e;
+
+        // TODO this can be made a bit faster
+        this._listeners["forEach"](function (x) {
+          x.error(e);
+        });
+
+        this._listeners = null;
+
+        print_error(e);
+      }
+    });
   }
 
-  bind(success, error, cancel) {
+  wait(task) {
     switch (this._state) {
     case 0:
-      this._onsuccess = success;
-      this._onerror = error;
-      this._oncancel = cancel;
+      this._listeners["push"](task);
+
+      task.onCancel = () => {
+        // TODO replace with faster `remove` function
+        var i = this._listeners["indexOf"](task);
+        // TODO assert that `i` is never `-1` ?
+        if (i !== -1) {
+          this._listeners["splice"](i, 1);
+        }
+      };
       break;
 
     case 1:
-      return success(this._value);
+      task.success(this._value);
+      break;
 
     case 2:
-      return error(this._value);
+      task.error(this._value);
+      break;
 
+    // TODO is this correct ?
     case 3:
-      return cancel();
+      task.cancel();
+      break;
     }
   }
 
-  success(value) {
+  kill() {
     if (this._state === 0) {
-      var f = this._onsuccess;
-      this._state = 1;
-      this._value = value;
-      this._onsuccess = null;
-      this._onerror = null;
-      this._oncancel = null;
-      return f(value);
-    }
-  }
+      var t = this._task;
 
-  error(e) {
-    if (this._state === 0) {
-      var f = this._onerror;
-      this._state = 2;
-      this._value = e;
-      this._onsuccess = null;
-      this._onerror = null;
-      this._oncancel = null;
-      return f(e);
-    }
-  }
-
-  cancel() {
-    if (this._state === 0) {
-      var f = this._oncancel;
       this._state = 3;
-      this._onsuccess = null;
-      this._onerror = null;
-      this._oncancel = null;
-      return f();
+      // TODO should this cancel all the listeners ?
+      this._listeners = null;
+      this._task = null;
+
+      t.cancel();
     }
   }
 }
 
 
-export function noop() {}
+function noop() {}
 
-export function task(f) {
-  return function () {
-    var out = new Task();
-
-    try {
-      f(out);
-    } catch (e) {
-      out.error(e);
-    }
-
-    return out;
+// There's no standard way to cancel a Promise
+function Task_from_Promise(f) {
+  return function (task) {
+    f()["then"](function (x) {
+      task.success(x);
+    }, function (e) {
+      task.error(e);
+    });
   };
 }
 
-export function run(x) {
-  return x();
+function Promise_from_Task(task) {
+  return new Promise(function (resolve, reject) {
+    new Task(task, resolve, reject);
+  });
 }
 
-export function print_error(e) {
-  return console["error"](e["stack"]);
+function print_error(e) {
+  console["error"](e["stack"]);
 }
 
-export function make_error(s) {
+function make_error(s) {
   return new Error(s);
 }
 
-export function run_root(task) {
-  return run(task).bind(noop, print_error, noop);
+function run_root(task) {
+  new Task(task, noop, print_error);
 }
 
 // This can be implemented purely with `execute`,
 // but it's faster to implement it like this
-export function success(x) {
-  return task(function (out) {
-    return out.success(x);
-  });
+function success(x) {
+  return function (task) {
+    task.success(x);
+  };
 }
 
-export function error(e) {
-  return task(function (out) {
-    return out.error(e);
-  });
+function error(e) {
+  return function (task) {
+    task.error(e);
+  };
 }
 
-export function cancel() {
-  return task(function (out) {
-    return out.cancel();
-  });
+function never() {
+  return function (task) {};
 }
 
-export function _bind(x, f) {
-  return task(function (out) {
+function _bind(x, f) {
+  return function (task) {
     function error(e) {
-      return out.error(e);
+      task.error(e);
     }
 
-    function cancel() {
-      return out.cancel();
-    }
+    var t1 = new Task(x, function (value) {
+      var t2 = new Task(f(value), function (value) {
+        task.success(value);
+      }, error);
 
-    return run(x).bind(function (value) {
-      return run(f(value)).bind(function (value) {
-        return out.success(value);
-      }, error, cancel);
-    }, error, cancel);
-  });
+      task.onCancel = function () {
+        t2.cancel();
+      };
+    }, error);
+
+    task.onCancel = function () {
+      t1.cancel();
+    };
+  };
 }
 
-export function _finally(before, after) {
-  return task(function (out) {
+function _finally(before, after) {
+  return function (task) {
     function error(e) {
-      return out.error(e);
+      task.error(e);
     }
 
-    function cancel() {
-      return out.cancel();
-    }
-
-    return run(before).bind(function (value) {
-      return run(after).bind(function (_) {
-        return out.success(value);
-      }, error, cancel);
+    var t1 = new Task(before, function (value) {
+      // This task is run no matter what, even if it is cancelled
+      new Task(after, function (_) {
+        task.success(value);
+      }, error);
 
     }, function (e) {
-      function propagate() {
-        return out.error(e);
-      }
-
-      // Errors have precedence over cancellations
-      return run(after).bind(propagate, error, propagate);
-
-    }, cancel);
-  });
-}
-
-export function on_error(x, f) {
-  return task(function (out) {
-    function success(value) {
-      return out.success(value);
-    }
-
-    function cancel() {
-      return out.cancel();
-    }
-
-    return run(x).bind(success, function (e) {
-      return run(f(e)).bind(success, function (e) {
-        return out.error(e);
-      }, cancel);
-    }, cancel);
-  });
-}
-
-export function on_cancel(x, then) {
-  return task(function (out) {
-    function success(value) {
-      return out.success(value);
-    }
-
-    function error(e) {
-      return out.error(e);
-    }
-
-    return run(x).bind(success, error, function () {
-      return run(then).bind(success, error, function () {
-        return out.cancel();
-      });
+      // This task is run no matter what, even if it is cancelled
+      new Task(after, function (_) {
+        task.error(e);
+      }, error);
     });
-  });
+
+    // TODO should this run the `after` task ?
+    task.onCancel = function () {
+      t1.cancel();
+    };
+  };
 }
 
-export function execute(f) {
-  return task(function (out) {
-    return out.success(f());
-  });
+function on_error(x, f) {
+  return function (task) {
+    function success(value) {
+      task.success(value);
+    }
+
+    var t1 = new Task(x, success, function (e) {
+      var t2 = new Task(f(e), success, function (e) {
+        task.error(e);
+      });
+
+      task.onCancel = function () {
+        t2.cancel();
+      };
+    });
+
+    task.onCancel = function () {
+      t1.cancel();
+    };
+  };
+}
+
+function execute(f) {
+  return function (task) {
+    try {
+      task.success(f());
+    } catch (e) {
+      task.error(e);
+    }
+  };
 }
 
 // This can be implemented purely with bind + wrap,
 // but it's more efficient to implement it with the FFI
-export function ignore(x) {
-  return task(function (out) {
-    return run(x).bind(function (_) {
-      return out.success(undefined);
-
+function ignore(x) {
+  return function (task) {
+    var t = new Task(x, function (_) {
+      task.success(undefined);
     }, function (e) {
-      return out.error(e);
-
-    }, function () {
-      return out.cancel();
+      task.error(e);
     });
-  });
+
+    task.onCancel = function () {
+      t.cancel();
+    };
+  };
 }
 
-export function delay(ms) {
-  return task(function (out) {
-    return setTimeout(function () {
-      return out.success(undefined);
-    }, ms);
-  });
-}
-
-export function never() {
-  return task(function (_) {});
-}
-
-export function detached(x) {
-  return task(function (out) {
+function thread(x) {
+  return function (task) {
     // TODO should this use nextTick or something ?
-    var t = run(x);
-    t.bind(noop, print_error, noop);
-    return out.success(t);
-  });
+    task.success(new Thread(x));
+  };
 }
 
-export function detached_error(x, e) {
-  return task(function (out) {
+function thread_wait(x) {
+  return function (task) {
     // TODO should this use nextTick or something ?
-    x.error(e);
-    return out.success(undefined);
-  });
+    x.wait(task);
+  };
 }
 
-export function detached_cancel(x) {
-  return task(function (out) {
+function thread_kill(x) {
+  return function (task) {
     // TODO should this use nextTick or something ?
-    x.cancel();
-    return out.success(undefined);
-  });
+    x.kill();
+    task.success(undefined);
+  };
 }
 
 function cancelAll(tasks) {
-  for (var i = 0; i < tasks.length; ++i) {
+  for (var i = 0; i < tasks["length"]; ++i) {
     tasks[i].cancel();
   }
 }
 
-export function concurrent(a) {
-  return task(function (t) {
+// TODO verify that this works correctly in all situations
+function concurrent(a) {
+  return function (task) {
     var out = new Array(a["length"]);
 
     var pending = a["length"];
 
-    var tasks = a.map(run);
+    var tasks = [];
+
+    var failed = false;
 
     function onSuccess() {
       --pending;
       if (pending === 0) {
-        return t.success(out);
+        task.success(out);
       }
     }
 
     function onError(e) {
+      failed = true;
       cancelAll(tasks);
-      return t.error(e);
+      task.error(e);
     }
 
-    function onCancel() {
-      cancelAll(tasks);
-      return t.cancel();
+    for (var i = 0; i < a["length"]; ++i) {
+      if (failed) {
+        break;
+
+      } else {
+        (function (i) {
+          var t = new Task(a[i], function (value) {
+            out[i] = value;
+            onSuccess();
+          }, onError);
+
+          tasks.push(t);
+        })(i);
+      }
     }
 
-    return tasks.forEach(function (x, i) {
-      x.bind(function (value) {
-        out[i] = value;
-        return onSuccess();
-      }, onError, onCancel);
-    });
-  });
-};
+    task.onCancel = function () {
+      cancelAll(tasks);
+    };
+  };
+}
 
-export function race(a) {
-  return task(function (t) {
-    var tasks = a.map(run);
+// TODO verify that this works correctly in all situations
+function race(a) {
+  return function (task) {
+    var tasks = [];
+
+    var done = false;
 
     function onSuccess(value) {
+      done = true;
       cancelAll(tasks);
-      return t.success(value);
+      task.success(value);
     }
 
     function onError(e) {
+      done = true;
       cancelAll(tasks);
-      return t.error(e);
+      task.error(e);
     }
 
-    function onCancel() {
-      cancelAll(tasks);
-      return t.cancel();
+    for (var i = 0; i < a["length"]; ++i) {
+      if (done) {
+        break;
+
+      } else {
+        tasks.push(new Task(a[i], onSuccess, onError));
+      }
     }
 
-    return tasks.forEach(function (x) {
-      x.bind(onSuccess, onError, onCancel);
-    });
-  });
-};
+    task.onCancel = function () {
+      cancelAll(tasks);
+    };
+  };
+}
+
+
+// Often-used functionality
+function delay(ms) {
+  return function (task) {
+    var timer = setTimeout(function () {
+      task.success(undefined);
+    }, ms);
+
+    task.onCancel = function () {
+      clearTimeout(timer);
+    };
+  };
+}
+
+function log(s) {
+  return function (task) {
+    console["log"](s);
+    task.success(undefined);
+  };
+}
+
+export { noop, Task_from_Promise, Promise_from_Task, print_error, make_error,
+         run_root, success, error, never, _bind, _finally, on_error, execute,
+         ignore, thread, thread_wait, thread_kill, concurrent, race, delay,
+         log };
 ----
 
 .Task.nu
@@ -333,29 +424,30 @@ export function race(a) {
 ----
 (TYPE (Task Value))
 
-(TYPE Error)
+(TYPE (Thread Value))
 
-(TYPE Detached)
+(TYPE Error)
 
 (INTERFACE T
   (Error<- :: (-> T Error)))
 
-(EXPORT { error = error
-          cancel = cancel
+(EXPORT { error
+          never
           finally = _finally
           on-error = on_error
-          on-cancel = on_cancel
           execute
           ignore
-          delay
-          never
-          detached
-          detached/error! = detached_error
-          detached/cancel! = detached_cancel
+          thread
+          thread/wait = thread_wait
+          thread/kill! = thread_kill
           concurrent
-          race }
+          race
+          delay
+          log }
 
   (FFI-IMPORT "Task"
+    (make_error :: (-> String Error))
+
     (run_root :: (-> (Task Void) Void))
 
     (success :: (FORALL A
@@ -363,11 +455,6 @@ export function race(a) {
 
     (error :: (FORALL A
                 (-> Error (Task A))))
-
-    (make_error :: (-> String Error))
-
-    (cancel :: (FORALL A
-                 (-> (Task A))))
 
     (never :: (FORALL A
                 (-> (Task A))))
@@ -387,11 +474,6 @@ export function race(a) {
                        (-> Error (Task A))
                        (Task A))))
 
-    (on_cancel :: (FORALL A
-                    (-> (Task A)
-                        (Task A)
-                        (Task A))))
-
     (execute :: (FORALL A
                   (-> (-> A) (Task A))))
 
@@ -399,19 +481,24 @@ export function race(a) {
                  (-> (Task A)
                      (Task Void))))
 
-    (delay :: (-> Integer (Task Void)))
+    (thread :: (FORALL A
+                 (-> (Task A) (Thread A))))
 
-    (detached :: (-> (Task Void) Detached))
+    (thread_wait :: (FORALL A
+                      (-> (Thread A) (Task A))))
 
-    (detached_error :: (-> Detached Error (Task Void)))
-
-    (detached_cancel :: (-> Detached (Task Void)))
+    (thread_kill :: (FORALL A
+                      (-> (Thread A) (Task Void))))
 
     (concurrent :: (FORALL A
                      (-> @(Task A) (List (Task A)))))
 
     (race :: (FORALL A
-               (-> @(Task A) (Task A)))))
+               (-> @(Task A) (Task A))))
+
+    (delay :: (-> Integer (Task Void)))
+
+    (log :: (-> String (Task Void))))
 
   # TODO is there a better way of handling this ?
   (MACRO
@@ -430,8 +517,8 @@ export function race(a) {
       (_bind x f)))
 
 (FUNCTION
-  (forever :: (FORALL A B
-                (-> (Task A) (Task B))))
+  (forever :: (FORALL A
+                (-> (Task Void) (Task A))))
   (forever task)
     (DO task
         (forever task)))
