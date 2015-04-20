@@ -67,7 +67,7 @@ class StreamBase {
   close(task) {
     // TODO is this correct ?
     this.each(function (x) {
-      x.cancel();
+      x.abort();
     });
 
     this.cleanup();

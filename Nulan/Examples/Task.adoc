@@ -6,7 +6,7 @@ class Task {
     this._pending = true;
     this._onSuccess = onSuccess;
     this._onError = onError;
-    this.onCancel = null;
+    this.onAbort = null;
 
     f(this);
   }
@@ -18,7 +18,7 @@ class Task {
       this._pending = false;
       this._onSuccess = null;
       this._onError = null;
-      this.onCancel = null;
+      this.onAbort = null;
 
       f(value);
     }
@@ -31,20 +31,20 @@ class Task {
       this._pending = false;
       this._onSuccess = null;
       this._onError = null;
-      this.onCancel = null;
+      this.onAbort = null;
 
       f(e);
     }
   }
 
-  cancel() {
+  abort() {
     if (this._pending) {
-      var f = this.onCancel;
+      var f = this.onAbort;
 
       this._pending = false;
       this._onSuccess = null;
       this._onError = null;
-      this.onCancel = null; // TODO what if somebody sets onCancel after the Task is cancelled ?
+      this.onAbort = null; // TODO what if somebody sets onAbort after the Task is aborted ?
 
       if (f !== null) {
         f();
@@ -59,7 +59,7 @@ class Thread {
     // 0 is pending
     // 1 is succeeded
     // 2 is errored
-    // 3 is cancelled
+    // 3 is aborted
     this._state = 0;
     this._value = null;
     this._listeners = [];
@@ -99,7 +99,7 @@ class Thread {
     case 0:
       this._listeners["push"](task);
 
-      task.onCancel = () => {
+      task.onAbort = () => {
         // TODO replace with faster `remove` function
         var i = this._listeners["indexOf"](task);
         // TODO assert that `i` is never `-1` ?
@@ -119,7 +119,7 @@ class Thread {
 
     // TODO is this correct ?
     case 3:
-      task.cancel();
+      task.abort();
       break;
     }
   }
@@ -129,11 +129,11 @@ class Thread {
       var t = this._task;
 
       this._state = 3;
-      // TODO should this cancel all the listeners ?
+      // TODO should this abort all the listeners ?
       this._listeners = null;
       this._task = null;
 
-      t.cancel();
+      t.abort();
     }
   }
 }
@@ -141,7 +141,7 @@ class Thread {
 
 function noop() {}
 
-// There's no standard way to cancel a Promise
+// There's no standard way to cancel/abort a Promise
 function Task_from_Promise(f) {
   return function (task) {
     f()["then"](function (x) {
@@ -199,13 +199,13 @@ function _bind(x, f) {
         task.success(value);
       }, error);
 
-      task.onCancel = function () {
-        t2.cancel();
+      task.onAbort = function () {
+        t2.abort();
       };
     }, error);
 
-    task.onCancel = function () {
-      t1.cancel();
+    task.onAbort = function () {
+      t1.abort();
     };
   };
 }
@@ -217,21 +217,21 @@ function _finally(before, after) {
     }
 
     var t1 = new Task(before, function (value) {
-      // This task is run no matter what, even if it is cancelled
+      // This task is run no matter what, even if it is aborted
       new Task(after, function (_) {
         task.success(value);
       }, error);
 
     }, function (e) {
-      // This task is run no matter what, even if it is cancelled
+      // This task is run no matter what, even if it is aborted
       new Task(after, function (_) {
         task.error(e);
       }, error);
     });
 
     // TODO should this run the `after` task ?
-    task.onCancel = function () {
-      t1.cancel();
+    task.onAbort = function () {
+      t1.abort();
     };
   };
 }
@@ -247,13 +247,13 @@ function on_error(x, f) {
         task.error(e);
       });
 
-      task.onCancel = function () {
-        t2.cancel();
+      task.onAbort = function () {
+        t2.abort();
       };
     });
 
-    task.onCancel = function () {
-      t1.cancel();
+    task.onAbort = function () {
+      t1.abort();
     };
   };
 }
@@ -278,8 +278,8 @@ function ignore(x) {
       task.error(e);
     });
 
-    task.onCancel = function () {
-      t.cancel();
+    task.onAbort = function () {
+      t.abort();
     };
   };
 }
@@ -306,9 +306,9 @@ function thread_kill(x) {
   };
 }
 
-function cancelAll(tasks) {
+function abortAll(tasks) {
   for (var i = 0; i < tasks["length"]; ++i) {
-    tasks[i].cancel();
+    tasks[i].abort();
   }
 }
 
@@ -332,7 +332,7 @@ function concurrent(a) {
 
     function onError(e) {
       failed = true;
-      cancelAll(tasks);
+      abortAll(tasks);
       task.error(e);
     }
 
@@ -352,8 +352,8 @@ function concurrent(a) {
       }
     }
 
-    task.onCancel = function () {
-      cancelAll(tasks);
+    task.onAbort = function () {
+      abortAll(tasks);
     };
   };
 }
@@ -367,13 +367,13 @@ function race(a) {
 
     function onSuccess(value) {
       done = true;
-      cancelAll(tasks);
+      abortAll(tasks);
       task.success(value);
     }
 
     function onError(e) {
       done = true;
-      cancelAll(tasks);
+      abortAll(tasks);
       task.error(e);
     }
 
@@ -386,8 +386,8 @@ function race(a) {
       }
     }
 
-    task.onCancel = function () {
-      cancelAll(tasks);
+    task.onAbort = function () {
+      abortAll(tasks);
     };
   };
 }
@@ -400,7 +400,7 @@ function delay(ms) {
       task.success(undefined);
     }, ms);
 
-    task.onCancel = function () {
+    task.onAbort = function () {
       clearTimeout(timer);
     };
   };
