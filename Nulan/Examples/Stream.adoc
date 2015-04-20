@@ -1,224 +1,292 @@
 .Stream.js
 [source,javascript]
 ----
-
-function check_length(i) {
+function check_length(task, i) {
   // TODO should we allow for a buffer of size 0 ?
-  if (i < 1) {
-    throw new Error("Expected 1 or greater but got " + i);
+  if (i >= 1) {
+    return true;
+  } else {
+    task.error(new Error("Expected 1 or greater but got " + i));
+    return false;
   }
 }
 
-function reject(a, err) {
-  for (var i = 0; i < a["length"]; ++i) {
-    a[i].reject(err);
-  }
+function error(task) {
+  task.error(this._error);
 }
 
-function add_puller(stream) {
-  return new Promise(function (resolve, reject) {
-    stream.pullers["push"]({
-      resolve: resolve,
-      reject: reject
+function error_pull(task) {
+  task.error(new Error("Cannot pull: stream is closed"));
+}
+
+function error_push(task) {
+  task.error(new Error("Cannot push: stream is closed"));
+}
+
+function error_error(task) {
+  task.error(new Error("Cannot error: stream is closed"));
+}
+
+function error_close(task) {
+  task.error(new Error("Cannot close: stream is already closed"));
+}
+
+
+class StreamBase {
+  constructor() {
+    this._error = null;
+    this._pullers = [];
+  }
+
+  cleanup() {
+    this._pullers = null;
+  }
+
+  each(f) {
+    for (var i = 0; i < this._pullers["length"]; ++i) {
+      f(this._pullers[i]);
+    }
+  }
+
+  error(task, err) {
+    this.each(function (x) {
+      x.error(err);
     });
-  });
+
+    this.cleanup();
+    this._error = err;
+
+    this.pull = error;
+    this.push = error;
+    this.error = error;
+    this.close = error;
+
+    task.error(err);
+  }
+
+  close(task) {
+    // TODO is this correct ?
+    this.each(function (x) {
+      x.cancel();
+    });
+
+    this.cleanup();
+
+    this.pull = error_pull;
+    this.push = error_push;
+    this.error = error_error;
+    this.close = error_close;
+
+    task.success(undefined);
+  }
 }
 
-function add_pusher(stream, value) {
-  return new Promise(function (resolve, reject) {
-    stream.pushers["push"]({
-      resolve: resolve,
-      reject: reject,
+
+class Stream extends StreamBase {
+  constructor() {
+    super();
+    this._pushers = [];
+  }
+
+  cleanup() {
+    super.cleanup();
+    this._pushers = null;
+  }
+
+  each(f) {
+    super.each(f);
+
+    for (var i = 0; i < this._pushers["length"]; ++i) {
+      f(this._pushers[i].task);
+    }
+  }
+
+  pull(task) {
+    if (this._pushers["length"]) {
+      var f = this._pushers["shift"]();
+      f.task.success(undefined);
+      task.success(f.value);
+
+    } else {
+      this._pullers["push"](task);
+    }
+  }
+
+  push(task, value) {
+    if (this._pullers["length"]) {
+      var f = this._pullers["shift"]();
+      f.success(value);
+      task.success(undefined);
+
+    } else {
+      this._pushers["push"]({
+        task: task,
+        value: value
+      });
+    }
+  }
+}
+
+
+class StreamBuffered extends StreamBase {
+  constructor(limit) {
+    super();
+    this._limit = limit;
+    this._buffer = [];
+  }
+
+  cleanup() {
+    super.cleanup();
+    this._limit = null;
+    this._buffer = null;
+  }
+
+  pull(task) {
+    if (this._buffer["length"]) {
+      task.success(this._buffer["shift"]());
+
+    } else {
+      this._pullers["push"](task);
+    }
+  }
+
+  push(task, value) {
+    // If there is a pending pull
+    if (this._pullers["length"]) {
+      this._pullers["shift"]().success(value);
+      task.success(undefined);
+
+    // If there is room in the buffer
+    } else if (this._buffer["length"] < this._limit) {
+      this._buffer["push"](value);
+      task.success(undefined);
+
+    // Buffer is full
+    } else {
+      this.full(task, value);
+    }
+  }
+}
+
+
+class StreamFixed extends StreamBuffered {
+  constructor(limit) {
+    super(limit);
+    this._pushers = [];
+  }
+
+  // TODO code duplication with Stream
+  cleanup() {
+    super.cleanup();
+    this._pushers = null;
+  }
+
+  // TODO code duplication with Stream
+  each(f) {
+    super.each(f);
+
+    for (var i = 0; i < this._pushers["length"]; ++i) {
+      f(this._pushers[i].task);
+    }
+  }
+
+  pull(task) {
+    // If there is stuff in the buffer
+    if (this._buffer["length"]) {
+      var value = this._buffer["shift"]();
+
+      // If there is a pending push
+      if (this._pushers["length"]) {
+        var f = this._pushers["shift"]();
+        this._buffer["push"](f.value);
+        f.task.success(undefined);
+      }
+
+      task.success(value);
+
+    // Buffer is empty, wait for push
+    } else {
+      this._pullers["push"](task);
+    }
+  }
+
+  full(task, value) {
+    this._pushers["push"]({
+      task: task,
       value: value
     });
-  });
-}
-
-function stream_buffer_push(stream, value) {
-  // If there is a pending pull
-  if (stream.pullers["length"]) {
-    stream.pullers["shift"]().resolve(value);
-
-  // If there is room in the buffer
-  } else if (stream.buffer["length"] < stream.limit) {
-    stream.buffer["push"](value);
-
-  // Buffer is full
-  } else {
-    return stream.full(stream, value);
   }
 }
 
 
-function stream_pull(stream) {
-  if (stream.pushers["length"]) {
-    var f = stream.pushers["shift"]();
-    f.resolve();
-    return f.value;
-
-  } else {
-    return add_puller(stream);
+class StreamSliding extends StreamBuffered {
+  full(task, value) {
+    // TODO more efficient function for this
+    this._buffer["shift"]();
+    this._buffer["push"](value);
+    task.success(undefined);
   }
 }
 
-function stream_push(stream, value) {
-  if (stream.pullers["length"]) {
-    stream.pullers["shift"]().resolve(value);
 
-  } else {
-    return add_pusher(stream, value);
+class StreamDropping extends StreamBuffered {
+  full(task, value) {
+    task.success(undefined);
   }
 }
 
-function stream_error(stream, err) {
-  reject(stream.pullers, err);
-  reject(stream.pushers, err);
-  stream.pullers = null;
-  stream.pushers = null;
-}
 
 export function stream() {
-  return function () {
-    return {
-      pullers: [],
-      pushers: [],
-
-      pull: stream_pull,
-      push: stream_push,
-      error: stream_error
-    };
+  return function (task) {
+    task.success(new Stream());
   };
-}
-
-
-var stream_fixed_full = add_pusher;
-
-function stream_fixed_pull(stream) {
-  // If there is stuff in the buffer
-  if (stream.buffer["length"]) {
-    var value = stream.buffer["shift"]();
-
-    // If there is a pending push
-    if (stream.pushers["length"]) {
-      var f = stream.pushers["shift"]();
-      stream.buffer["push"](f.value);
-      f.resolve();
-    }
-
-    return value;
-
-  // Buffer is empty, wait for push
-  } else {
-    return add_puller(stream);
-  }
-}
-
-function stream_fixed_error(stream, err) {
-  stream_error(stream, err);
-  stream.buffer = null;
 }
 
 export function stream_fixed(i) {
-  check_length(i);
-  return function () {
-    return {
-      limit: i,
-      buffer: [],
-      pullers: [],
-      pushers: [],
-
-      full: stream_fixed_full,
-      pull: stream_fixed_pull,
-      push: stream_buffer_push,
-      error: stream_fixed_error
-    };
+  return function (task) {
+    if (check_length(task, i)) {
+      task.success(new StreamFixed(i));
+    }
   };
-}
-
-
-function stream_sliding_pull(stream) {
-  if (stream.buffer["length"]) {
-    return stream.buffer["shift"]();
-
-  } else {
-    return add_puller(stream);
-  }
-}
-
-function stream_sliding_full(stream, value) {
-  stream.buffer["shift"]();
-  stream.buffer["push"](value);
-}
-
-function stream_sliding_error(stream, err) {
-  reject(stream.pullers, err);
-  stream.pullers = null;
-  stream.buffer = null;
 }
 
 export function stream_sliding(i) {
-  check_length(i);
-  return function () {
-    return {
-      limit: i,
-      buffer: [],
-      pullers: [],
-
-      full: stream_sliding_full,
-      pull: stream_sliding_pull,
-      push: stream_buffer_push,
-      error: stream_sliding_error
-    };
+  return function (task) {
+    if (check_length(task, i)) {
+      task.success(new StreamSliding(i));
+    }
   };
-}
-
-
-var stream_dropping_pull = stream_sliding_pull;
-var stream_dropping_error = stream_sliding_error;
-
-function stream_dropping_full(stream, value) {
-  stream.buffer[stream.buffer["length"] - 1] = value;
 }
 
 export function stream_dropping(i) {
-  check_length(i);
-  return function () {
-    return {
-      limit: i,
-      buffer: [],
-      pullers: [],
-
-      full: stream_dropping_full,
-      pull: stream_dropping_pull,
-      push: stream_buffer_push,
-      error: stream_dropping_error
-    };
+  return function (task) {
+    if (check_length(task, i)) {
+      task.success(new StreamDropping(i));
+    }
   };
 }
 
-
 export function pull(stream) {
-  return function () {
-    return stream.pull(stream);
+  return function (task) {
+    stream.pull(task);
   };
 }
 
 export function push(stream, value) {
-  return function () {
-    return stream.push(stream, value);
+  return function (task) {
+    stream.push(task, value);
   };
 }
 
 export function error(stream, err) {
-  return function () {
-    stream.error(stream, err);
+  return function (task) {
+    stream.error(task, err);
+  };
+}
 
-    stream.pull = stream.push = stream.error = function () {
-      throw err;
-    };
-
-    // TODO is this correct ?
-    throw err;
+export function close(stream) {
+  return function (task) {
+    stream.close(task);
   };
 }
 ----
@@ -234,7 +302,8 @@ export function error(stream, err) {
           stream/dropping = stream_dropping
           pull! = pull
           push! = push
-          stream/error! = error }
+          stream/error! = error
+          stream/close! = close }
 
   (FFI-IMPORT "Stream"
     (stream :: (FORALL A
@@ -256,7 +325,10 @@ export function error(stream, err) {
                (-> (Stream A) A (Task Void))))
 
     (error :: (FORALL A
-                (-> (Stream A) Error (Task Void))))))
+                (-> (Stream A) Error (Task Void))))
+
+    (close :: (FORALL A
+                (-> (Stream A) (Task Void))))))
 
 (FUNCTION
   (stream/make :: (FORALL A B
@@ -264,8 +336,7 @@ export function error(stream, err) {
                         (Task (Stream A)))))
   (stream/make f)
     (DO out = (stream)
-        # TODO is it a good idea to use ignore here ?
-        (detached (ignore (f out)))
+        (thread (f out))
         (wrap out)))
 
 (FUNCTION
@@ -277,11 +348,13 @@ export function error(stream, err) {
         @(map in -> in
            (forever
              (DO value = (pull! in)
-                 (push! out)))))))
+                 (push! out value)))))))
 
 (FUNCTION
   (stream/map :: (FORALL A B
-                   (-> (Stream A) (-> A B) (Task (Stream B)))))
+                   (-> (Stream A)
+                       (-> A B)
+                       (Task (Stream B)))))
   (stream/map in f)
     (stream/make -> out
       (forever
@@ -290,7 +363,10 @@ export function error(stream, err) {
 
 (FUNCTION
   (stream/foldl :: (FORALL A B
-                     (-> A (Stream B) (-> A B (Task A)) (Task Void))))
+                     (-> A
+                         (Stream B)
+                         (-> A B (Task A))
+                         (Task Void))))
   (stream/foldl init s f)
     (LOOP next
         | old = init
