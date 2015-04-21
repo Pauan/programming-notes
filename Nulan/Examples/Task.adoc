@@ -2,22 +2,22 @@
 [source,javascript]
 ----
 class Task {
-  constructor(f, onSuccess, onError) {
+  constructor(onSuccess, onError, onCancel) {
     this._pending = true;
     this._onSuccess = onSuccess;
     this._onError = onError;
+    this._onCancel = onCancel;
     this.onAbort = null;
-
-    f(this);
   }
 
   success(value) {
     if (this._pending) {
-      var f = this._onSuccess;
+      const f = this._onSuccess;
 
       this._pending = false;
       this._onSuccess = null;
       this._onError = null;
+      this._onCancel = null;
       this.onAbort = null;
 
       f(value);
@@ -26,20 +26,35 @@ class Task {
 
   error(e) {
     if (this._pending) {
-      var f = this._onError;
+      const f = this._onError;
 
       this._pending = false;
       this._onSuccess = null;
       this._onError = null;
+      this._onCancel = null;
       this.onAbort = null;
 
       f(e);
     }
   }
 
+  cancel() {
+    if (this._pending) {
+      const f = this._onCancel;
+
+      this._pending = false;
+      this._onSuccess = null;
+      this._onError = null;
+      this._onCancel = null;
+      this.onAbort = null;
+
+      f();
+    }
+  }
+
   abort() {
     if (this._pending) {
-      var f = this.onAbort;
+      const f = this.onAbort;
 
       this._pending = false;
       this._onSuccess = null;
@@ -59,18 +74,19 @@ class Thread {
     // 0 is pending
     // 1 is succeeded
     // 2 is errored
-    // 3 is aborted
+    // 3 is cancelled
+    // 4 is aborted
     this._state = 0;
     this._value = null;
     this._listeners = [];
 
-    this._task = new Task(task, (value) => {
+    this._task = run(task, (value) => {
       if (this._state === 0) {
         this._state = 1;
         this._value = value;
 
         // TODO this can be made a bit faster
-        this._listeners["forEach"](function (x) {
+        this._listeners["forEach"]((x) => {
           x.success(value);
         });
 
@@ -83,13 +99,25 @@ class Thread {
         this._value = e;
 
         // TODO this can be made a bit faster
-        this._listeners["forEach"](function (x) {
+        this._listeners["forEach"]((x) => {
           x.error(e);
         });
 
         this._listeners = null;
 
         print_error(e);
+      }
+
+    }, () => {
+      if (this._state === 0) {
+        this._state = 3;
+
+        // TODO this can be made a bit faster
+        this._listeners["forEach"]((x) => {
+          x.cancel();
+        });
+
+        this._listeners = null;
       }
     });
   }
@@ -101,7 +129,7 @@ class Thread {
 
       task.onAbort = () => {
         // TODO replace with faster `remove` function
-        var i = this._listeners["indexOf"](task);
+        const i = this._listeners["indexOf"](task);
         // TODO assert that `i` is never `-1` ?
         if (i !== -1) {
           this._listeners["splice"](i, 1);
@@ -117,21 +145,30 @@ class Thread {
       task.error(this._value);
       break;
 
-    // TODO is this correct ?
     case 3:
-      task.abort();
+      task.cancel();
+      break;
+
+    // TODO is this correct ?
+    case 4:
+      task.cancel();
       break;
     }
   }
 
   kill() {
     if (this._state === 0) {
-      var t = this._task;
+      const t = this._task;
 
-      this._state = 3;
-      // TODO should this abort all the listeners ?
-      this._listeners = null;
+      this._state = 4;
       this._task = null;
+
+      // TODO this can be made a bit faster
+      this._listeners["forEach"]((x) => {
+        x.cancel();
+      });
+
+      this._listeners = null;
 
       t.abort();
     }
@@ -139,284 +176,312 @@ class Thread {
 }
 
 
-function noop() {}
+export const noop = () => {};
 
-// There's no standard way to cancel/abort a Promise
-function Task_from_Promise(f) {
-  return function (task) {
-    f()["then"](function (x) {
-      task.success(x);
-    }, function (e) {
-      task.error(e);
-    });
-  };
-}
-
-function Promise_from_Task(task) {
-  return new Promise(function (resolve, reject) {
-    new Task(task, resolve, reject);
+  // There's no standard way to cancel/abort a Promise
+export const Task_from_Promise = (f) => (task) => {
+  f()["then"]((x) => {
+    task.success(x);
+  }, (e) => {
+    task.error(e);
   });
-}
+};
 
-function print_error(e) {
+export const Promise_from_Task = (task) =>
+  new Promise((resolve, reject) => {
+    // TODO is cancellation correctly handled ?
+    run(task, resolve, reject, reject);
+  });
+
+export const print_error = (e) => {
   console["error"](e["stack"]);
-}
+};
 
-function make_error(s) {
-  return new Error(s);
-}
+export const make_error = (s) => new Error(s);
 
-function run_root(task) {
-  new Task(task, noop, print_error);
-}
+export const run = (task, onSuccess, onError, onCancel) => {
+  const t = new Task(onSuccess, onError, onCancel);
+  task(t);
+  return t;
+};
+
+export const run_root = (task) => {
+  run(task, noop, print_error, noop);
+};
 
 // This can be implemented purely with `execute`,
 // but it's faster to implement it like this
-function success(x) {
-  return function (task) {
-    task.success(x);
-  };
-}
+export const success = (x) => (task) => {
+  task.success(x);
+};
 
-function error(e) {
-  return function (task) {
+export const error = (e) => (task) => {
+  task.error(e);
+};
+
+export const cancel = () => (task) => {
+  task.cancel();
+};
+
+export const never = () => (task) => {};
+
+export const _bind = (x, f) => (task) => {
+  const error = (e) => {
     task.error(e);
   };
-}
 
-function never() {
-  return function (task) {};
-}
-
-function _bind(x, f) {
-  return function (task) {
-    function error(e) {
-      task.error(e);
-    }
-
-    var t1 = new Task(x, function (value) {
-      var t2 = new Task(f(value), function (value) {
-        task.success(value);
-      }, error);
-
-      task.onAbort = function () {
-        t2.abort();
-      };
-    }, error);
-
-    task.onAbort = function () {
-      t1.abort();
-    };
+  const cancel = () => {
+    task.cancel();
   };
-}
 
-function _finally(before, after) {
-  return function (task) {
-    function error(e) {
-      task.error(e);
-    }
-
-    var t1 = new Task(before, function (value) {
-      // This task is run no matter what, even if it is aborted
-      new Task(after, function (_) {
-        task.success(value);
-      }, error);
-
-    }, function (e) {
-      // This task is run no matter what, even if it is aborted
-      new Task(after, function (_) {
-        task.error(e);
-      }, error);
-    });
-
-    // TODO should this run the `after` task ?
-    task.onAbort = function () {
-      t1.abort();
-    };
-  };
-}
-
-function on_error(x, f) {
-  return function (task) {
-    function success(value) {
+  const t1 = run(x, (value) => {
+    const t2 = run(f(value), (value) => {
       task.success(value);
-    }
+    }, error, cancel);
 
-    var t1 = new Task(x, success, function (e) {
-      var t2 = new Task(f(e), success, function (e) {
-        task.error(e);
-      });
+    task.onAbort = () => {
+      t2.abort();
+    };
+  }, error, cancel);
 
-      task.onAbort = function () {
-        t2.abort();
-      };
+  task.onAbort = () => {
+    t1.abort();
+  };
+};
+
+export const _finally = (before, after) => (task) => {
+  const error = (e) => {
+    task.error(e);
+  };
+
+  const t1 = run(before, (value) => {
+    // This task is run no matter what, even if it is aborted
+    run(after, (_) => {
+      task.success(value);
+
+    }, error, () => {
+      task.cancel();
     });
 
-    task.onAbort = function () {
-      t1.abort();
-    };
-  };
-}
-
-function execute(f) {
-  return function (task) {
-    try {
-      task.success(f());
-    } catch (e) {
+  }, (e) => {
+    // Errors have precedence over cancellations
+    const propagate = () => {
       task.error(e);
-    }
+    };
+
+    // This task is run no matter what, even if it is aborted
+    run(after, propagate, error, propagate);
+  });
+
+  // TODO should this run the `after` task ?
+  task.onAbort = () => {
+    t1.abort();
   };
-}
+};
+
+export const on_error = (x, f) => (task) => {
+  const success = (value) => {
+    task.success(value);
+  };
+
+  const cancel = () => {
+    task.cancel();
+  };
+
+  const t1 = run(x, success, (e) => {
+    const t2 = run(f(e), success, (e) => {
+      task.error(e);
+    }, cancel);
+
+    // TODO should this abort ?
+    task.onAbort = () => {
+      t2.abort();
+    };
+  }, cancel);
+
+  task.onAbort = () => {
+    t1.abort();
+  };
+};
+
+export const on_cancel = (x, y) => (task) => {
+  const success = (value) => {
+    task.success(value);
+  };
+
+  const error = (e) => {
+    task.error(e);
+  };
+
+  const t1 = run(x, success, error, () => {
+    const t2 = run(y, success, error, () => {
+      task.cancel();
+    });
+
+    // TODO should this abort ?
+    task.onAbort = () => {
+      t2.abort();
+    };
+  });
+
+  task.onAbort = () => {
+    t1.abort();
+  };
+};
+
+export const execute = (f) => (task) => {
+  try {
+    task.success(f());
+  } catch (e) {
+    task.error(e);
+  }
+};
 
 // This can be implemented purely with bind + wrap,
 // but it's more efficient to implement it with the FFI
-function ignore(x) {
-  return function (task) {
-    var t = new Task(x, function (_) {
-      task.success(undefined);
-    }, function (e) {
-      task.error(e);
-    });
-
-    task.onAbort = function () {
-      t.abort();
-    };
-  };
-}
-
-function thread(x) {
-  return function (task) {
-    // TODO should this use nextTick or something ?
-    task.success(new Thread(x));
-  };
-}
-
-function thread_wait(x) {
-  return function (task) {
-    // TODO should this use nextTick or something ?
-    x.wait(task);
-  };
-}
-
-function thread_kill(x) {
-  return function (task) {
-    // TODO should this use nextTick or something ?
-    x.kill();
+export const ignore = (x) => (task) => {
+  const t = run(x, (_) => {
     task.success(undefined);
-  };
-}
 
-function abortAll(tasks) {
-  for (var i = 0; i < tasks["length"]; ++i) {
+  }, (e) => {
+    task.error(e);
+
+  }, () => {
+    task.cancel();
+  });
+
+  task.onAbort = () => {
+    t.abort();
+  };
+};
+
+export const thread = (x) => (task) => {
+  // TODO should this use nextTick or something ?
+  task.success(new Thread(x));
+};
+
+export const thread_wait = (x) => (task) => {
+  // TODO should this use nextTick or something ?
+  x.wait(task);
+};
+
+export const thread_kill = (x) => (task) => {
+  // TODO should this use nextTick or something ?
+  x.kill();
+  task.success(undefined);
+};
+
+const abortAll = (tasks) => {
+  // TODO is it faster to use a var or a let ?
+  for (let i = 0; i < tasks["length"]; ++i) {
     tasks[i].abort();
   }
-}
+};
 
 // TODO verify that this works correctly in all situations
-function concurrent(a) {
-  return function (task) {
-    var out = new Array(a["length"]);
+export const concurrent = (a) => (task) => {
+  const out = new Array(a["length"]);
 
-    var pending = a["length"];
+  const tasks = [];
 
-    var tasks = [];
+  let pending = a["length"];
 
-    var failed = false;
+  let failed = false;
 
-    function onSuccess() {
-      --pending;
-      if (pending === 0) {
-        task.success(out);
-      }
+  const onSuccess = () => {
+    --pending;
+    if (pending === 0) {
+      task.success(out);
     }
-
-    function onError(e) {
-      failed = true;
-      abortAll(tasks);
-      task.error(e);
-    }
-
-    for (var i = 0; i < a["length"]; ++i) {
-      if (failed) {
-        break;
-
-      } else {
-        (function (i) {
-          var t = new Task(a[i], function (value) {
-            out[i] = value;
-            onSuccess();
-          }, onError);
-
-          tasks.push(t);
-        })(i);
-      }
-    }
-
-    task.onAbort = function () {
-      abortAll(tasks);
-    };
   };
-}
+
+  const onError = (e) => {
+    failed = true;
+    abortAll(tasks);
+    task.error(e);
+  };
+
+  const onCancel = () => {
+    failed = true;
+    abortAll(tasks);
+    task.cancel();
+  };
+
+  for (let i = 0; i < a["length"]; ++i) {
+    if (failed) {
+      break;
+
+    } else {
+      const t = run(a[i], (value) => {
+        out[i] = value;
+        onSuccess();
+      }, onError, onCancel);
+
+      tasks["push"](t);
+    }
+  }
+
+  task.onAbort = () => {
+    abortAll(tasks);
+  };
+};
 
 // TODO verify that this works correctly in all situations
-function race(a) {
-  return function (task) {
-    var tasks = [];
+export const race = (a) => (task) => {
+  const tasks = [];
 
-    var done = false;
+  let done = false;
 
-    function onSuccess(value) {
-      done = true;
-      abortAll(tasks);
-      task.success(value);
-    }
-
-    function onError(e) {
-      done = true;
-      abortAll(tasks);
-      task.error(e);
-    }
-
-    for (var i = 0; i < a["length"]; ++i) {
-      if (done) {
-        break;
-
-      } else {
-        tasks.push(new Task(a[i], onSuccess, onError));
-      }
-    }
-
-    task.onAbort = function () {
-      abortAll(tasks);
-    };
+  const onSuccess = (value) => {
+    done = true;
+    abortAll(tasks);
+    task.success(value);
   };
-}
+
+  const onError = (e) => {
+    done = true;
+    abortAll(tasks);
+    task.error(e);
+  };
+
+  // TODO should it only cancel if all the tasks fail ?
+  const onCancel = () => {
+    done = true;
+    abortAll(tasks);
+    task.cancel();
+  };
+
+  // TODO is it faster to use var or let ?
+  for (let i = 0; i < a["length"]; ++i) {
+    if (done) {
+      break;
+
+    } else {
+      tasks["push"](run(a[i], onSuccess, onError, onCancel));
+    }
+  }
+
+  task.onAbort = () => {
+    abortAll(tasks);
+  };
+};
 
 
 // Often-used functionality
-function delay(ms) {
-  return function (task) {
-    var timer = setTimeout(function () {
-      task.success(undefined);
-    }, ms);
-
-    task.onAbort = function () {
-      clearTimeout(timer);
-    };
-  };
-}
-
-function log(s) {
-  return function (task) {
-    console["log"](s);
+export const delay = (ms) => (task) => {
+  const timer = setTimeout(() => {
     task.success(undefined);
-  };
-}
+  }, ms);
 
-export { noop, Task_from_Promise, Promise_from_Task, print_error, make_error,
-         run_root, success, error, never, _bind, _finally, on_error, execute,
-         ignore, thread, thread_wait, thread_kill, concurrent, race, delay,
-         log };
+  task.onAbort = () => {
+    clearTimeout(timer);
+  };
+};
+
+export const log = (s) => (task) => {
+  console["log"](s);
+  task.success(undefined);
+};
 ----
 
 .Task.nu
@@ -432,9 +497,11 @@ export { noop, Task_from_Promise, Promise_from_Task, print_error, make_error,
   (Error<- :: (-> T Error)))
 
 (EXPORT { error
+          cancel
           never
           finally = _finally
           on-error = on_error
+          on-cancel = on_cancel
           execute
           ignore
           thread
@@ -456,6 +523,9 @@ export { noop, Task_from_Promise, Promise_from_Task, print_error, make_error,
     (error :: (FORALL A
                 (-> Error (Task A))))
 
+    (cancel :: (FORALL A
+                 (-> (Task A))))
+
     (never :: (FORALL A
                 (-> (Task A))))
 
@@ -473,6 +543,11 @@ export { noop, Task_from_Promise, Promise_from_Task, print_error, make_error,
                    (-> (Task A)
                        (-> Error (Task A))
                        (Task A))))
+
+    (on_cancel :: (FORALL A
+                    (-> (Task A)
+                        (Task A)
+                        (Task A))))
 
     (execute :: (FORALL A
                   (-> (-> A) (Task A))))
