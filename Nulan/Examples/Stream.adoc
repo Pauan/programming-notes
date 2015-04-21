@@ -1,7 +1,7 @@
 .Stream.js
 [source,javascript]
 ----
-function check_length(task, i) {
+const check_length = (task, i) => {
   // TODO should we allow for a buffer of size 0 ?
   if (i >= 1) {
     return true;
@@ -9,27 +9,27 @@ function check_length(task, i) {
     task.error(new Error("Expected 1 or greater but got " + i));
     return false;
   }
-}
+};
 
-function error(task) {
+const error = (task) => {
   task.error(this._error);
-}
+};
 
-function error_pull(task) {
+const error_pull = (task) => {
   task.error(new Error("Cannot pull: stream is closed"));
-}
+};
 
-function error_push(task) {
+const error_push = (task) => {
   task.error(new Error("Cannot push: stream is closed"));
-}
+};
 
-function error_error(task) {
+const error_error = (task) => {
   task.error(new Error("Cannot error: stream is closed"));
-}
+};
 
-function error_close(task) {
+const error_close = (task) => {
   task.error(new Error("Cannot close: stream is already closed"));
-}
+};
 
 
 class StreamBase {
@@ -43,13 +43,14 @@ class StreamBase {
   }
 
   each(f) {
-    for (var i = 0; i < this._pullers["length"]; ++i) {
+    // TODO is it faster to use var or let ?
+    for (let i = 0; i < this._pullers["length"]; ++i) {
       f(this._pullers[i]);
     }
   }
 
   error(task, err) {
-    this.each(function (x) {
+    this.each((x) => {
       x.error(err);
     });
 
@@ -61,12 +62,13 @@ class StreamBase {
     this.error = error;
     this.close = error;
 
+    // TODO is this a good idea ?
     task.error(err);
   }
 
   close(task) {
     // TODO is this correct ?
-    this.each(function (x) {
+    this.each((x) => {
       x.cancel();
     });
 
@@ -77,6 +79,7 @@ class StreamBase {
     this.error = error_error;
     this.close = error_close;
 
+    // TODO should this cancel ?
     task.success(undefined);
   }
 }
@@ -96,14 +99,15 @@ class Stream extends StreamBase {
   each(f) {
     super.each(f);
 
-    for (var i = 0; i < this._pushers["length"]; ++i) {
+    // TODO is it faster to use var or let ?
+    for (let i = 0; i < this._pushers["length"]; ++i) {
       f(this._pushers[i].task);
     }
   }
 
   pull(task) {
     if (this._pushers["length"]) {
-      var f = this._pushers["shift"]();
+      const f = this._pushers["shift"]();
       f.task.success(undefined);
       task.success(f.value);
 
@@ -114,7 +118,7 @@ class Stream extends StreamBase {
 
   push(task, value) {
     if (this._pullers["length"]) {
-      var f = this._pullers["shift"]();
+      const f = this._pullers["shift"]();
       f.success(value);
       task.success(undefined);
 
@@ -185,7 +189,8 @@ class StreamFixed extends StreamBuffered {
   each(f) {
     super.each(f);
 
-    for (var i = 0; i < this._pushers["length"]; ++i) {
+    // TODO is it faster to use var or let ?
+    for (let i = 0; i < this._pushers["length"]; ++i) {
       f(this._pushers[i].task);
     }
   }
@@ -193,11 +198,11 @@ class StreamFixed extends StreamBuffered {
   pull(task) {
     // If there is stuff in the buffer
     if (this._buffer["length"]) {
-      var value = this._buffer["shift"]();
+      const value = this._buffer["shift"]();
 
       // If there is a pending push
       if (this._pushers["length"]) {
-        var f = this._pushers["shift"]();
+        const f = this._pushers["shift"]();
         this._buffer["push"](f.value);
         f.task.success(undefined);
       }
@@ -236,59 +241,43 @@ class StreamDropping extends StreamBuffered {
 }
 
 
-export function stream() {
-  return function (task) {
-    task.success(new Stream());
-  };
-}
+export const stream = () => (task) => {
+  task.success(new Stream());
+};
 
-export function stream_fixed(i) {
-  return function (task) {
-    if (check_length(task, i)) {
-      task.success(new StreamFixed(i));
-    }
-  };
-}
+export const stream_fixed = (i) => (task) => {
+  if (check_length(task, i)) {
+    task.success(new StreamFixed(i));
+  }
+};
 
-export function stream_sliding(i) {
-  return function (task) {
-    if (check_length(task, i)) {
-      task.success(new StreamSliding(i));
-    }
-  };
-}
+export const stream_sliding = (i) => (task) => {
+  if (check_length(task, i)) {
+    task.success(new StreamSliding(i));
+  }
+};
 
-export function stream_dropping(i) {
-  return function (task) {
-    if (check_length(task, i)) {
-      task.success(new StreamDropping(i));
-    }
-  };
-}
+export const stream_dropping = (i) => (task) => {
+  if (check_length(task, i)) {
+    task.success(new StreamDropping(i));
+  }
+};
 
-export function pull(stream) {
-  return function (task) {
-    stream.pull(task);
-  };
-}
+export const pull = (stream) => (task) => {
+  stream.pull(task);
+};
 
-export function push(stream, value) {
-  return function (task) {
-    stream.push(task, value);
-  };
-}
+export const push = (stream, value) => (task) => {
+  stream.push(task, value);
+};
 
-export function error(stream, err) {
-  return function (task) {
-    stream.error(task, err);
-  };
-}
+export const error = (stream, err) => (task) => {
+  stream.error(task, err);
+};
 
-export function close(stream) {
-  return function (task) {
-    stream.close(task);
-  };
-}
+export const close = (stream) => (task) => {
+  stream.close(task);
+};
 ----
 
 .Stream.nu
