@@ -1,5 +1,5 @@
-import { stream, push, pull, close } from "../Stream"; // "nulan:Stream"
-import { _bind, run_root, run } from "../Task"; // "nulan:Task"
+import { stream, push, pull, close } from "../../FFI/Stream"; // "nulan:Stream"
+import { _bind, run_root, run } from "../../FFI/Task"; // "nulan:Task"
 
 var fs = require("fs");
 var path = require("path");
