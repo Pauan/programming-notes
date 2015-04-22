@@ -151,7 +151,7 @@
       (set-balanced node (left node) (insert-max (right node) new))))
 
 
-(EXPORT { Dict get set remove has? }
+(EXPORT { Dict get set remove has? dict sorted-dict }
 
   (INTERFACE A
     (get :: (FORALL Key Value
@@ -177,23 +177,101 @@
           (*true)))
 
 
-  (TYPE (Dict Key Value)
-    (*nil)
-    (*tree { left = (Dict Key Value)
-             right = (Dict Key Value)
+  (TYPE (Sorted-Dict Key Value)
+    (*nil { sort = (-> Key Key Comparison) })
+
+    (*tree { left = (Sorted-Dict Key Value)
+             right = (Sorted-Dict Key Value)
+             sort = (-> Key Key Comparison)
              key = Key
              value = Value
              depth = Integer }))
 
 
+  # TODO is this valid ?
+  (FUNCTION
+    (sorted-dict :: (FORALL Key Value
+                      (-> (Sorted-Dict Key Value))))
+    (sorted-dict sort)
+      (*nil { sort = sort }))
+
+
+  (TYPE (Dict Key Value)
+    (*dict (Sorted-Dict Key Value)))
+
+
+  # TODO is this valid ?
+  (FUNCTION
+    (dict :: (FORALL Key Value
+               (-> (Dict Key Value))))
+    (dict)
+      (*dict (sorted-dict compare)))
+
+
   (IMPLEMENT (FORALL Key Value
                (Dict Key Value))
 
-    (get (*nil) _)
+    (compare (*dict (*nil _)) (*dict (*nil _)))
+      (*equal)
+
+    (compare (*dict (*nil _)) (*dict _))
+      (*less)
+
+    (compare (*dict _) (*dict (*nil _)))
+      (*more)
+
+    (compare (*dict (*tree x)) (*dict (*tree y)))
+      (MATCH (compare x.key y.key)
+        (*equal)
+          (MATCH (compare x.left y.left)
+            (*equal)
+              (MATCH (compare x.right y.right)
+                (*equal)
+                  (*equal)
+
+
+            )
+
+        (*less)
+          (MATCH (compare )
+
+        (*more)
+        )
+
+
+    (get (*dict x) key)
+      (*dict (get x key))
+
+    (set (*dict x) key value)
+      (*dict (set x key value))
+
+    (remove (*dict x) key)
+      (*dict (remove x key))
+
+    (empty? (*dict x))
+      (empty? x)
+
+    (left (*dict x))
+      (left x)
+
+    (right (*dict x))
+      (right x)
+
+    (set-children (*dict x) l r)
+      (*dict (set-children x l r))
+
+    (depth (*dict x))
+      (depth x))
+
+
+  (IMPLEMENT (FORALL Key Value
+               (Sorted-Dict Key Value))
+
+    (get (*nil _) _)
       (*nothing)
 
     (get (*tree node) key)
-      (MATCH (compare key node.key)
+      (MATCH (node.sort key node.key)
         (*equal)
           (*something node.value)
 
@@ -204,16 +282,17 @@
           (get node.right key))
 
 
-    (set (*nil) key value)
-      (*tree { left = (*nil)
-               right = (*nil)
+    (set (*nil x) key value)
+      (*tree { left = (*nil x)
+               right = (*nil x)
+               sort = x.sort
                key = key
                value = value
                depth = 1 })
 
     (set node key value)
       (LET (*tree x) = node
-        (MATCH (compare key x.key)
+        (MATCH (node.sort key x.key)
           (*equal)
             (*tree { @x key = key
                         value = value })
@@ -229,12 +308,12 @@
               (set x.right key value))))
 
 
-    (remove (*nil) _)
-      (*nil)
+    (remove (*nil x) _)
+      (*nil x)
 
     (remove node key)
       (LET (*tree x) = node
-        (MATCH (compare key x.key)
+        (MATCH (node.sort key x.key)
           (*equal)
             (concat x.left x.right)
 
@@ -249,7 +328,7 @@
               (remove x.right key))))
 
 
-    (empty? (*nil))
+    (empty? (*nil _))
       (*true)
 
     (empty? (*tree _))
@@ -259,14 +338,14 @@
     (left (*tree x))
       x.left
 
-    (left (*nil))
+    (left (*nil _))
       (FAIL)
 
 
     (right (*tree x))
       x.right
 
-    (right (*nil))
+    (right (*nil _))
       (FAIL)
 
 
@@ -277,18 +356,13 @@
                     right = r
                     depth = (add d 1) }))
 
-    (set-children (*nil) _ _)
+    (set-children (*nil _) _ _)
       (FAIL)
 
 
     (depth (*tree x))
       x.depth
 
-    (depth (*nil))
+    (depth (*nil _))
       0))
-
-
-(EXPORT { Sorted-Dict }
-  (TYPE (Sorted-Dict Key Value)
-    (*sorted (-> Key Key Comparison) (Dict Key Value))))
 ----
