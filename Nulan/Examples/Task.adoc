@@ -18,7 +18,7 @@ class Task {
       this._onSuccess = null;
       this._onError = null;
       this._onCancel = null;
-      this.onAbort = null;
+      this.onAbort = null; // TODO what if somebody sets onAbort after the Task is succeeded ?
 
       f(value);
     }
@@ -32,7 +32,7 @@ class Task {
       this._onSuccess = null;
       this._onError = null;
       this._onCancel = null;
-      this.onAbort = null;
+      this.onAbort = null; // TODO what if somebody sets onAbort after the Task is errored ?
 
       f(e);
     }
@@ -46,7 +46,7 @@ class Task {
       this._onSuccess = null;
       this._onError = null;
       this._onCancel = null;
-      this.onAbort = null;
+      this.onAbort = null; // TODO what if somebody sets onAbort after the Task is cancelled ?
 
       f();
     }
@@ -59,8 +59,10 @@ class Task {
       this._pending = false;
       this._onSuccess = null;
       this._onError = null;
+      this._onCancel = null;
       this.onAbort = null; // TODO what if somebody sets onAbort after the Task is aborted ?
 
+      // Some tasks can't be aborted
       if (f !== null) {
         f();
       }
@@ -69,65 +71,64 @@ class Task {
 }
 
 
+const PENDING   = 0;
+const SUCCEEDED = 1;
+const CANCELLED = 2;
+const ABORTED   = 3;
+
 class Thread {
   constructor(task) {
-    // 0 is pending
-    // 1 is succeeded
-    // 2 is errored
-    // 3 is cancelled
-    // 4 is aborted
-    this._state = 0;
+    this._state = PENDING;
     this._value = null;
     this._listeners = [];
 
     this._task = run(task, (value) => {
-      if (this._state === 0) {
-        this._state = 1;
+      if (this._state === PENDING) {
+        const f = this._listeners;
+
+        this._state = SUCCEEDED;
         this._value = value;
+        this._listeners = null;
+        this._task = null;
 
         // TODO this can be made a bit faster
-        this._listeners["forEach"]((x) => {
-          x.success(value);
-        });
-
-        this._listeners = null;
+        f["forEach"]((x) => { x.success(value) });
       }
 
     }, (e) => {
-      if (this._state === 0) {
-        this._state = 2;
-        this._value = e;
-
-        // TODO this can be made a bit faster
-        this._listeners["forEach"]((x) => {
-          x.error(e);
-        });
-
-        this._listeners = null;
-
+      if (this._state === PENDING) {
+        this._cancel();
+        // TODO should this print before or after cancelling ?
         print_error(e);
       }
 
     }, () => {
-      if (this._state === 0) {
-        this._state = 3;
-
-        // TODO this can be made a bit faster
-        this._listeners["forEach"]((x) => {
-          x.cancel();
-        });
-
-        this._listeners = null;
+      if (this._state === PENDING) {
+        this._cancel();
       }
     });
   }
 
+  _cancel() {
+    const f = this._listeners;
+
+    // TODO verify that _value is null ?
+    this._state = CANCELLED;
+    this._listeners = null;
+    this._task = null;
+
+    // TODO this can be made a bit faster
+    f["forEach"]((x) => { x.cancel() });
+  }
+
   wait(task) {
     switch (this._state) {
-    case 0:
+    case PENDING:
       this._listeners["push"](task);
 
+      // TODO test this
       task.onAbort = () => {
+        // TODO is it possible for this to be called after `_listeners` is set to `null` ?
         // TODO replace with faster `remove` function
         const i = this._listeners["indexOf"](task);
         // TODO assert that `i` is never `-1` ?
@@ -137,39 +138,35 @@ class Thread {
       };
       break;
 
-    case 1:
+    case SUCCESS:
       task.success(this._value);
       break;
 
-    case 2:
-      task.error(this._value);
-      break;
-
-    case 3:
+    case CANCELLED:
       task.cancel();
       break;
 
     // TODO is this correct ?
-    case 4:
+    case ABORTED:
       task.cancel();
       break;
     }
   }
 
   kill() {
-    if (this._state === 0) {
+    if (this._state === PENDING) {
       const t = this._task;
+      const f = this._listeners;
 
-      this._state = 4;
+      // TODO verify that _value is null ?
+      this._state = ABORTED;
+      this._listeners = null;
       this._task = null;
 
       // TODO this can be made a bit faster
-      this._listeners["forEach"]((x) => {
-        x.cancel();
-      });
+      f["forEach"]((x) => { x.cancel() });
 
-      this._listeners = null;
-
+      // TODO should this be before or after cancelling the listeners ?
       t.abort();
     }
   }
@@ -178,7 +175,7 @@ class Thread {
 
 export const noop = () => {};
 
-  // There's no standard way to cancel/abort a Promise
+// There's no standard way to cancel/abort a Promise
 export const Task_from_Promise = (f) => (task) => {
   f()["then"]((x) => {
     task.success(x);
@@ -197,8 +194,6 @@ export const print_error = (e) => {
   console["error"](e["stack"]);
 };
 
-export const make_error = (s) => new Error(s);
-
 export const run = (task, onSuccess, onError, onCancel) => {
   const t = new Task(onSuccess, onError, onCancel);
   task(t);
@@ -215,8 +210,12 @@ export const success = (x) => (task) => {
   task.success(x);
 };
 
-export const error = (e) => (task) => {
-  task.error(e);
+export const error = (s) => {
+  // TODO better stack traces
+  const e = new Error(s);
+  return (task) => {
+    task.error(e);
+  };
 };
 
 export const cancel = () => (task) => {
@@ -254,14 +253,15 @@ export const _finally = (before, after) => (task) => {
     task.error(e);
   };
 
+  const cancel = () => {
+    task.cancel();
+  };
+
   const t1 = run(before, (value) => {
     // This task is run no matter what, even if it is aborted
     run(after, (_) => {
       task.success(value);
-
-    }, error, () => {
-      task.cancel();
-    });
+    }, error, cancel);
 
   }, (e) => {
     // Errors have precedence over cancellations
@@ -271,34 +271,9 @@ export const _finally = (before, after) => (task) => {
 
     // This task is run no matter what, even if it is aborted
     run(after, propagate, error, propagate);
-  });
-
-  // TODO should this run the `after` task ?
-  task.onAbort = () => {
-    t1.abort();
-  };
-};
-
-export const on_error = (x, f) => (task) => {
-  const success = (value) => {
-    task.success(value);
-  };
-
-  const cancel = () => {
-    task.cancel();
-  };
-
-  const t1 = run(x, success, (e) => {
-    const t2 = run(f(e), success, (e) => {
-      task.error(e);
-    }, cancel);
-
-    // TODO should this abort ?
-    task.onAbort = () => {
-      t2.abort();
-    };
   }, cancel);
 
+  // TODO should this run the `after` task ?
   task.onAbort = () => {
     t1.abort();
   };
@@ -491,16 +466,10 @@ export const log = (s) => (task) => {
 
 (TYPE (Thread Value))
 
-(TYPE Error)
-
-(INTERFACE T
-  (Error<- :: (-> T Error)))
-
 (EXPORT { error
           cancel
           never
           finally = _finally
-          on-error = on_error
           on-cancel = on_cancel
           execute
           ignore
@@ -513,15 +482,13 @@ export const log = (s) => (task) => {
           log }
 
   (FFI-IMPORT "Task"
-    (make_error :: (-> String Error))
-
     (run_root :: (-> (Task Void) Void))
 
     (success :: (FORALL A
                   (-> A (Task A))))
 
     (error :: (FORALL A
-                (-> Error (Task A))))
+                (-> String (Task A))))
 
     (cancel :: (FORALL A
                  (-> (Task A))))
@@ -537,11 +504,6 @@ export const log = (s) => (task) => {
     (_finally :: (FORALL A
                    (-> (Task A)
                        (Task Void)
-                       (Task A))))
-
-    (on_error :: (FORALL A
-                   (-> (Task A)
-                       (-> Error (Task A))
                        (Task A))))
 
     (on_cancel :: (FORALL A
@@ -566,7 +528,7 @@ export const log = (s) => (task) => {
                       (-> (Thread A) (Task Void))))
 
     (concurrent :: (FORALL A
-                     (-> @(Task A) (List (Task A)))))
+                     (-> @(Task A) (Task (List A)))))
 
     (race :: (FORALL A
                (-> @(Task A) (Task A))))
@@ -579,10 +541,6 @@ export const log = (s) => (task) => {
   (MACRO
     (FFI-PROGRAM-START)
       `(run_root (,(symbol "main"))))
-
-  (IMPLEMENT String
-    (Error<- x)
-      (make_error x))
 
   (IMPLEMENT Task
     (wrap x)
