@@ -1,148 +1,83 @@
 .Stream.js
 [source,javascript]
 ----
-const check_length = (task, i) => {
+const check_length = (i) => {
   // TODO should we allow for a buffer of size 0 ?
   if (i >= 1) {
     return true;
   } else {
-    task.error(new Error("Expected 1 or greater but got " + i));
-    return false;
+    throw new Error("Expected 1 or greater but got " + i);
   }
 };
 
-const error = (task) => {
-  task.error(this._error);
+const closed_peek = (task) => {
+  if (this._buffer["length"]) {
+    task.success(this._buffer[0]);
+  } else {
+    task.cancel();
+  }
 };
 
-const error_pull = (task) => {
-  task.error(new Error("Cannot pull: stream is closed"));
+const closed_pull = (task) => {
+  if (this._buffer["length"]) {
+    task.success(this._buffer["shift"]());
+  } else {
+    task.cancel();
+  }
 };
 
-const error_push = (task) => {
-  task.error(new Error("Cannot push: stream is closed"));
+const closed_push = (task, value) => {
+  task.cancel();
 };
 
-const error_error = (task) => {
-  task.error(new Error("Cannot error: stream is closed"));
-};
-
-const error_close = (task) => {
+const closed_close = (task) => {
+  // TODO is this correct ? maybe it should simply do nothing if you close a Stream multiple times
   task.error(new Error("Cannot close: stream is already closed"));
 };
 
 
 class StreamBase {
-  constructor() {
-    this._error = null;
-    this._pullers = [];
-  }
-
-  cleanup() {
-    this._pullers = null;
-  }
-
-  each(f) {
-    // TODO is it faster to use var or let ?
-    for (let i = 0; i < this._pullers["length"]; ++i) {
-      f(this._pullers[i]);
-    }
-  }
-
-  error(task, err) {
-    this.each((x) => {
-      x.error(err);
-    });
-
-    this.cleanup();
-    this._error = err;
-
-    this.pull = error;
-    this.push = error;
-    this.error = error;
-    this.close = error;
-
-    // TODO is this a good idea ?
-    task.error(err);
-  }
-
-  close(task) {
-    // TODO is this correct ?
-    this.each((x) => {
-      x.cancel();
-    });
-
-    this.cleanup();
-
-    this.pull = error_pull;
-    this.push = error_push;
-    this.error = error_error;
-    this.close = error_close;
-
-    // TODO should this cancel ?
-    task.success(undefined);
-  }
-}
-
-
-class Stream extends StreamBase {
-  constructor() {
-    super();
-    this._pushers = [];
-  }
-
-  cleanup() {
-    super.cleanup();
-    this._pushers = null;
-  }
-
-  each(f) {
-    super.each(f);
-
-    // TODO is it faster to use var or let ?
-    for (let i = 0; i < this._pushers["length"]; ++i) {
-      f(this._pushers[i].task);
-    }
-  }
-
-  pull(task) {
-    if (this._pushers["length"]) {
-      const f = this._pushers["shift"]();
-      f.task.success(undefined);
-      task.success(f.value);
-
-    } else {
-      this._pullers["push"](task);
-    }
-  }
-
-  push(task, value) {
-    if (this._pullers["length"]) {
-      const f = this._pullers["shift"]();
-      f.success(value);
-      task.success(undefined);
-
-    } else {
-      this._pushers["push"]({
-        task: task,
-        value: value
-      });
-    }
-  }
-}
-
-
-class StreamBuffered extends StreamBase {
   constructor(limit) {
-    super();
     this._limit = limit;
+    this._pullers = [];
     this._buffer = [];
   }
 
   cleanup() {
-    super.cleanup();
+    const a = this._pullers;
+
     this._limit = null;
-    this._buffer = null;
+    this._pullers = null;
+
+    // TODO is it faster to use var or let ?
+    for (let i = 0; i < a["length"]; ++i) {
+      a[i].task.cancel();
+    }
+  }
+
+  close(task) {
+    this.peek = closed_peek;
+    this.pull = closed_pull;
+    this.push = closed_push;
+    this.close = closed_close;
+
+    // TODO is this executed in the right order ?
+    this.cleanup();
+
+    // TODO should this cancel ?
+    task.success(undefined);
+  }
+
+  peek(task) {
+    if (this._buffer["length"]) {
+      task.success(this._buffer[0]);
+
+    } else {
+      this._pullers["push"]({
+        push: true,
+        task: task
+      });
+    }
   }
 
   pull(task) {
@@ -150,14 +85,23 @@ class StreamBuffered extends StreamBase {
       task.success(this._buffer["shift"]());
 
     } else {
-      this._pullers["push"](task);
+      this._pullers["push"]({
+        push: false,
+        task: task
+      });
     }
   }
 
   push(task, value) {
     // If there is a pending pull
     if (this._pullers["length"]) {
-      this._pullers["shift"]().success(value);
+      const f = this._pullers["shift"]();
+
+      if (f.push) {
+        this._buffer["push"](value);
+      }
+
+      f.task.success(value);
       task.success(undefined);
 
     // If there is room in the buffer
@@ -173,25 +117,22 @@ class StreamBuffered extends StreamBase {
 }
 
 
-class StreamFixed extends StreamBuffered {
+class StreamFixed extends StreamBase {
   constructor(limit) {
     super(limit);
     this._pushers = [];
   }
 
-  // TODO code duplication with Stream
   cleanup() {
     super.cleanup();
-    this._pushers = null;
-  }
 
-  // TODO code duplication with Stream
-  each(f) {
-    super.each(f);
+    const a = this._pushers;
+
+    this._pushers = null;
 
     // TODO is it faster to use var or let ?
-    for (let i = 0; i < this._pushers["length"]; ++i) {
-      f(this._pushers[i].task);
+    for (let i = 0; i < a["length"]; ++i) {
+      a[i].task.cancel();
     }
   }
 
@@ -211,20 +152,23 @@ class StreamFixed extends StreamBuffered {
 
     // Buffer is empty, wait for push
     } else {
-      this._pullers["push"](task);
+      this._pullers["push"]({
+        push: false,
+        task: task
+      });
     }
   }
 
   full(task, value) {
     this._pushers["push"]({
-      task: task,
-      value: value
+      value: value,
+      task: task
     });
   }
 }
 
 
-class StreamSliding extends StreamBuffered {
+class StreamSliding extends StreamBase {
   full(task, value) {
     // TODO more efficient function for this
     this._buffer["shift"]();
@@ -234,33 +178,33 @@ class StreamSliding extends StreamBuffered {
 }
 
 
-class StreamDropping extends StreamBuffered {
+class StreamDropping extends StreamBase {
   full(task, value) {
     task.success(undefined);
   }
 }
 
 
-export const stream = () => (task) => {
-  task.success(new Stream());
-};
-
 export const stream_fixed = (i) => (task) => {
-  if (check_length(task, i)) {
+  if (check_length(i)) {
     task.success(new StreamFixed(i));
   }
 };
 
 export const stream_sliding = (i) => (task) => {
-  if (check_length(task, i)) {
+  if (check_length(i)) {
     task.success(new StreamSliding(i));
   }
 };
 
 export const stream_dropping = (i) => (task) => {
-  if (check_length(task, i)) {
+  if (check_length(i)) {
     task.success(new StreamDropping(i));
   }
+};
+
+export const peek = (stream) => (task) => {
+  stream.peek(task);
 };
 
 export const pull = (stream) => (task) => {
@@ -269,10 +213,6 @@ export const pull = (stream) => (task) => {
 
 export const push = (stream, value) => (task) => {
   stream.push(task, value);
-};
-
-export const error = (stream, err) => (task) => {
-  stream.error(task, err);
 };
 
 export const close = (stream) => (task) => {
@@ -285,19 +225,15 @@ export const close = (stream) => (task) => {
 ----
 (TYPE (Stream A))
 
-(EXPORT { stream
-          stream/fixed = stream_fixed
+(EXPORT { stream/fixed = stream_fixed
           stream/sliding = stream_sliding
           stream/dropping = stream_dropping
+          peek
           pull! = pull
           push! = push
-          stream/error! = error
           stream/close! = close }
 
   (FFI-IMPORT "Stream"
-    (stream :: (FORALL A
-                 (-> (Task (Stream A)))))
-
     (stream_fixed :: (FORALL A
                        (-> Integer (Task (Stream A)))))
 
@@ -307,120 +243,202 @@ export const close = (stream) => (task) => {
     (stream_dropping :: (FORALL A
                           (-> Integer (Task (Stream A)))))
 
+    (peek :: (FORALL A
+               (-> (Stream A) (Task A))))
+
     (pull :: (FORALL A
                (-> (Stream A) (Task A))))
 
     (push :: (FORALL A
                (-> (Stream A) A (Task Void))))
 
-    (error :: (FORALL A
-                (-> (Stream A) Error (Task Void))))
-
     (close :: (FORALL A
                 (-> (Stream A) (Task Void))))))
 
 (FUNCTION
-  (stream/each :: (FORALL A
-                    (-> (Stream A)
-                        (-> A (Task Void))
+  (stream :: (FORALL A
+               (-> (Task (Stream A)))))
+  (stream)
+    (stream/fixed 1))
+
+(FUNCTION
+  (w/in-stream :: (FORALL A
+                    (-> (Task A)
                         (Task Void))))
-  (stream/each in f)
+  (w/in-stream task)
     (on-cancel
-      (forever
-        (DO value = (pull! in)
-            (f value)))
+      (ignore task)
       (wrap (void))))
 
 (FUNCTION
-  (pipe :: (FORALL A
-             (-> (Stream A)
-                 (Stream A)
-                 (Task Void))))
-  (pipe from to)
-    (stream/each from -> value
-      (push! to value)))
+  (w/out-stream :: (FORALL A B
+                     (-> (Stream A)
+                         (Task B)
+                         (Task Void))))
+  (w/out-stream out task)
+    # TODO if out gets closed, this may call stream/close! twice
+    # TODO what if it errors ?
+    (finally (w/in-stream task)
+             (stream/close! out)))
 
+# TODO find a better name for this
 (FUNCTION
-  (stream/make :: (FORALL A B
-                    (-> (-> (Stream A) (Task B))
-                        (Task (Stream A)))))
-  (stream/make f)
-    (DO out = (stream)
-        # TODO if out gets closed, this may call stream/close! twice
-        (ignore
+  (stream/generate :: (FORALL A B
+                        (-> (Stream A)
+                            (-> (Stream A) (Task B))
+                            (Task (Stream A)))))
+  (stream/generate out f)
+    (DO (ignore
           (thread
-            # TODO what if it errors ?
-            (finally (f out)
-                     (stream/close! out))))
+            (w/out-stream out
+              (f out))))
         (wrap out)))
 
 (FUNCTION
-  (stream/merge :: (FORALL A
-                     (-> @(Stream A) (Task (Stream A)))))
-  (stream/merge @in)
-    (stream/make -> out
-      (concurrent
-        @(map in -> in
-           (pipe in out)))))
+  (stream/each! :: (FORALL A
+                     (-> (Stream A)
+                         (-> A (Task Void))
+                         (Task Void))))
+  (stream/each! in f)
+    (w/in-stream
+      (forever
+        (DO value = (pull! in)
+            (f value)))))
 
 (FUNCTION
-  (stream/map :: (FORALL A B
-                   (-> (Stream A)
-                       (-> A B)
-                       (Task (Stream B)))))
-  (stream/map in f)
-    (stream/make -> out
-      (stream/each in -> value
+  (pipe! :: (FORALL A
+              (-> (Stream A)
+                  (Stream A)
+                  (Task Void))))
+  (pipe! from to)
+    (w/out-stream to
+      (stream/each! from -> value
+        (push! to value))))
+
+(FUNCTION
+  (stream/merge! :: (FORALL A
+                      (-> @(Stream A)
+                         (Stream A)
+                         (Task Void))))
+  (stream/merge! @in out)
+    (w/out-stream out
+      (concurrent
+        @(map in -> in
+           # Can't use pipe because we want to close the output stream
+           # only when *all* of the input streams are closed
+           (stream/each! in -> value
+             (push! out value))))))
+
+(FUNCTION
+  (stream/map! :: (FORALL A B
+                    (-> (Stream A)
+                        (Stream B)
+                        (-> A B)
+                        (Task Void))))
+  (stream/map! in out f)
+    (w/stream out
+      (stream/each! in -> value
         (push! out (f value)))))
 
 (FUNCTION
-  (stream/foldl :: (FORALL A B
-                     (-> A
-                         (Stream B)
-                         (-> A B (Task A))
-                         (Task A))))
-  (stream/foldl init s f)
+  (stream/foldl! :: (FORALL A B
+                      (-> A
+                          (Stream B)
+                          (-> A B (Task A))
+                          (Task A))))
+  (stream/foldl! init in f)
     (LOOP next
         | old = init
       # TODO doesn't this generate a huge chain of `on-cancel`s ?
       (on-cancel
         # TODO even though this is tail-recursive, does it generate a huge chain of `_bind` ?
-        (DO value = (pull! s)
+        (DO value = (pull! in)
             new = (f old value)
             (next new))
         (wrap old))))
 
 (FUNCTION
-  (stream/join :: (FORALL A
-                    (-> (Stream A) (Task A))))
-  (stream/join s)
-    (stream/foldl (empty) s -> old value
+  (stream/join! :: (FORALL A
+                     (-> (Stream A) (Task A))))
+  (stream/join! in)
+    (stream/foldl! (empty) in -> old value
       (concat old value)))
+
+(FUNCTION
+  # TODO this type signature is probably wrong
+  (stream/flatten! :: (FORALL A B
+                        (-> (Stream (A B))
+                            (Stream B)
+                            (Task Void))))
+  (stream/flatten! in out)
+    (w/out-stream out
+      (stream/each! in -> value
+        (ignore
+          (sequence
+            @(map value -> value
+               (push! value out)))))))
 ----
 
 .Examples
 [source]
 ----
-(DO # Lazily generates the stream [0 1 2 3 4 ...]
-    x = (stream/make -> out
-          (LOOP next
-              | i = 0
-            (DO (push! out i)
-                (next (add i 1)))))
+(FUNCTION
+  (generate/add! :: (-> (Stream Integer) (Task Void)))
+  (generate/add! out)
+    (LOOP next
+        | i = 0
+      (DO (push! out i)
+          (next (add i 1)))))
 
-    # Lazily generates the stream [1 2 4 8 16 ....]
-    y = (stream/make -> out
-          (LOOP next
-              | i = 1
-            (DO (push! out i)
-                (next (multiply i 2)))))
+(FUNCTION
+  (generate/multiply! :: (-> (Stream Integer) (Task Void)))
+  (generate/multiply! out)
+    (LOOP next
+        | i = 1
+      (DO (push! out i)
+          (next (multiply i 2)))))
 
-    # Merges the two streams in a non-deterministic fashion
-    z = (stream/merge x y)
-
-    # Accumulates and logs the sum of the merged stream
-    (stream/foldl 0 z -> old value
+(FUNCTION
+  (accumulate :: (-> (Stream Integer) (Task Integer)))
+  (accumulate in)
+    (stream/foldl! 0 in -> old value
       (LET new = (add old value)
         (DO (log new)
             (wrap new)))))
+
+
+# Using threads
+(DO # Lazily generates the stream [0 1 2 3 4 ...]
+    x = (stream/generate (stream) generate-add!)
+
+    # Lazily generates the stream [1 2 4 8 16 ....]
+    y = (stream/generate (stream) generate/multiply!)
+
+    # Merges the two streams in a non-deterministic fashion
+    z = (stream/generate (stream) -> out
+          (stream/merge! x y out))
+
+    # Accumulates and logs the sum of the merged stream
+    (ignore
+      (accumulate z)))
+
+
+# Using concurrent
+(DO x = (stream)
+    y = (stream)
+    z = (stream)
+
+    (ignore
+      (concurrent
+        # Lazily generates the stream [0 1 2 3 4 ...]
+        (generate-add! x)
+
+        # Lazily generates the stream [1 2 4 8 16 ....]
+        (generate-multiply! y)
+
+        # Merges the two streams in a non-deterministic fashion
+        (stream/merge! x y z)
+
+        # Accumulates and logs the sum of the merged stream
+        (accumulate z))))
 ----
