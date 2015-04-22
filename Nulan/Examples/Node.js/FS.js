@@ -1,67 +1,8 @@
-import { stream_fixed, push, pull, close } from "../Stream"; // "nulan:Stream"
-import { _bind, run_root, run, success } from "../Task"; // "nulan:Task"
+import { stream, push, pull, close } from "../Stream"; // "nulan:Stream"
+import { _bind, run_root, run } from "../Task"; // "nulan:Task"
 
 var fs = require("fs");
 var path = require("path");
-
-/*function read_from_Node(input) {
-  return function (task) {
-    task.onAbort = function () {
-      cleanup();
-    };
-
-
-
-    function onError(e) {
-      cleanup();
-      task.error(e);
-    }
-
-    function onReadable() {
-      var chunk = input["read"]();
-      if (chunk !== null) {
-        cleanup();
-        task.success(chunk);
-      }
-    }
-
-    input["on"]("error", onError);
-    input["on"]("readable", onReadable);
-
-    onReadable();
-  };
-}
-
-function write_to_Node(input, value) {
-  return function (task) {
-    if (input["write"](value, "utf8")) {
-      task.success(undefined);
-
-    } else {
-      task.onAbort = function () {
-        cleanup();
-      };
-
-      function cleanup() {
-        input["removeListener"]("error", onError);
-        input["removeListener"]("drain", onDrain);
-      }
-
-      function onError(e) {
-        cleanup();
-        task.error(e);
-      }
-
-      function onDrain() {
-        cleanup();
-        task.success(undefined);
-      }
-
-      input["on"]("error", onError);
-      input["on"]("drain", onDrain);
-    }
-  };
-}*/
 
 
 const close_error = (stream, e) => {
@@ -80,106 +21,120 @@ export const callback = (task) => (err, value) => {
 };
 
 
-export const read_from_Node = (input, output) =>
-  _bind(output, (output) => {
-    const cleanup = () => {
-      input["removeListener"]("end", onEnd);
-      input["removeListener"]("error", onError);
-      input["removeListener"]("readable", onReadable);
-    };
+export const read_from_Node = (input, output) => (task) => {
+  const cleanup = () => {
+    console.log("read cleanup");
+    input["removeListener"]("end", onEnd);
+    input["removeListener"]("error", onError);
+    input["removeListener"]("readable", onReadable);
+  };
 
-    const onEnd = () => {
-      cleanup();
-      // TODO is this correct ?
-      run_root(close(output));
-    };
+  const onEnd = () => {
+    console.log("read onEnd");
+    cleanup();
+    // TODO is this correct ?
+    run_root(close(output));
+  };
 
-    const onError = (e) => {
-      cleanup();
-      close_error(output, e);
-    };
+  const onError = (e) => {
+    console.log("read onError");
+    cleanup();
+    close_error(output, e);
+  };
 
-    const onReadable = () => {
-      const chunk = input["read"]();
-      if (chunk !== null) {
-        // TODO is it possible for a "readable" event to trigger even if `chunk` is not `null` ?
-        // TODO is it possible for onEnd to be called after the Stream is closed, and thus double-close it ?
-        run(push(output, chunk), onReadable, onError, onEnd);
+  const onReadable = () => {
+    const chunk = input["read"]();
+    console.log("read onReadable", chunk !== null);
+    if (chunk !== null) {
+      console.log("read chunk");
+      // TODO is it possible for a "readable" event to trigger even if `chunk` is not `null` ?
+      // TODO is it possible for onEnd to be called after the Stream is closed, and thus double-close it ?
+      run(push(output, chunk), onReadable, onError, onEnd);
+    }
+  };
+
+  input["setEncoding"]("utf8");
+
+  input["on"]("end", onEnd);
+  input["on"]("error", onError);
+  input["on"]("readable", onReadable);
+
+  onReadable();
+
+  task.success(output);
+};
+
+export const write_to_Node = (input, output) => (task) => {
+  const cleanup = () => {
+    console.log("write cleanup");
+    output["removeListener"]("finish", onFinish);
+    output["removeListener"]("error", onError);
+    output["removeListener"]("drain", onDrain);
+  };
+
+  const onFinish = () => {
+    console.log("write onFinish");
+    cleanup();
+    // TODO is this correct ?
+    run_root(close(input));
+  };
+
+  const onError = (e) => {
+    console.log("write onError");
+    cleanup();
+    close_error(input, e);
+  };
+
+  const onCancel = () => {
+    console.log("write onCancel");
+    // TODO is this correct ?
+    cleanup();
+    // TODO is this correct ?
+    output["end"]();
+  };
+
+  const onDrain = () => {
+    console.log("write onDrain");
+    run(pull(input), (value) => {
+      if (output["write"](value, "utf8")) {
+        console.log("write wrote");
+        onDrain();
+      } else {
+        console.log("write wait");
       }
-    };
+    }, onError, onCancel);
+  };
 
-    input["setEncoding"]("utf8");
+  // TODO this doesn't work
+  //output["setDefaultEncoding"]("utf8");
 
-    input["on"]("end", onEnd);
-    input["on"]("error", onError);
-    input["on"]("readable", onReadable);
+  output["on"]("finish", onFinish);
+  output["on"]("error", onError);
+  output["on"]("drain", onDrain);
 
-    onReadable();
+  // TODO is this necessary ?
+  onDrain();
 
-    return success(output);
-  });
-
-export const write_to_Node = (input, output) =>
-  _bind(input, (input) => {
-    const cleanup = () => {
-      output["removeListener"]("finish", onFinish);
-      output["removeListener"]("error", onError);
-      output["removeListener"]("drain", onDrain);
-    };
-
-    const onFinish = () => {
-      cleanup();
-      // TODO is this correct ?
-      run_root(close(input));
-    };
-
-    const onError = (e) => {
-      cleanup();
-      close_error(input, e);
-    };
-
-    const onCancel = () => {
-      // TODO is this correct ?
-      cleanup();
-      // TODO is this correct ?
-      output["end"]();
-    };
-
-    const onDrain = () => {
-      run(pull(input), (value) => {
-        if (output["write"](value, "utf8")) {
-          onDrain();
-        }
-      }, onError, onCancel);
-    };
-
-    output["setDefaultEncoding"]("utf8");
-
-    output["on"]("finish", onFinish);
-    output["on"]("error", onError);
-    output["on"]("drain", onDrain);
-
-    // TODO is this necessary ?
-    onDrain();
-
-    return success(input);
-  });
+  task.success(undefined);
+};
 
 
 const fs_open = (path, flags) => (task) => {
   fs["open"](path, flags, callback(task));
 };
 
+// TODO maybe have an `out` argument, rather than returning a new Stream
 export const read_file = (path) =>
   _bind(fs_open(path, "r"), (fd) =>
-    read_from_Node(fs["createReadStream"](null, {
-      "encoding": "utf8",
-      "fd": fd
-    }), stream_fixed(1)));
+    _bind(stream(), (output) =>
+      read_from_Node(fs["createReadStream"](null, {
+        "encoding": "utf8",
+        "fd": fd
+      }), output)));
 
-export const write_file = (path) =>
-  _bind(fs_open(path, "w"), (fd) => {
-    write_from_Node(stream_fixed(1), fs["createWriteStream"](null, {
+export const write_file = (path, input) =>
+  _bind(fs_open(path, "w"), (fd) =>
+    write_to_Node(input, fs["createWriteStream"](null, {
       "encoding": "utf8",
       "fd": fd
     })));

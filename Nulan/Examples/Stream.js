@@ -1,3 +1,8 @@
+import { Queue } from "./Task"; // "nulan:Task"
+
+
+export const DEFAULT_BUFFER_SIZE = 5;
+
 const check_length = (i) => {
   // TODO should we allow for a buffer of size 0 ?
   if (i >= 1) {
@@ -7,17 +12,17 @@ const check_length = (i) => {
   }
 };
 
-const closed_peek = (task) => {
-  if (this._buffer["length"]) {
-    task.success(this._buffer[0]);
+const closed_peek = function (task) {
+  if (this._buffer.length) {
+    task.success(this._buffer.peek());
   } else {
     task.cancel();
   }
 };
 
-const closed_pull = (task) => {
-  if (this._buffer["length"]) {
-    task.success(this._buffer["shift"]());
+const closed_pull = function (task) {
+  if (this._buffer.length) {
+    task.success(this._buffer.pull());
   } else {
     task.cancel();
   }
@@ -37,7 +42,7 @@ class StreamBase {
   constructor(limit) {
     this._limit = limit;
     this._pullers = [];
-    this._buffer = [];
+    this._buffer = new Queue();
   }
 
   cleanup() {
@@ -53,6 +58,7 @@ class StreamBase {
   }
 
   close(task) {
+    console.log("stream close");
     this.peek = closed_peek;
     this.pull = closed_pull;
     this.push = closed_push;
@@ -66,8 +72,8 @@ class StreamBase {
   }
 
   peek(task) {
-    if (this._buffer["length"]) {
-      task.success(this._buffer[0]);
+    if (this._buffer.length) {
+      task.success(this._buffer.peek());
 
     } else {
       this._pullers["push"]({
@@ -78,8 +84,9 @@ class StreamBase {
   }
 
   pull(task) {
-    if (this._buffer["length"]) {
-      task.success(this._buffer["shift"]());
+    console.log("stream pull");
+    if (this._buffer.length) {
+      task.success(this._buffer.pull());
 
     } else {
       this._pullers["push"]({
@@ -90,24 +97,28 @@ class StreamBase {
   }
 
   push(task, value) {
+    console.log("----");
     // If there is a pending pull
     if (this._pullers["length"]) {
+      console.log("stream push pull");
       const f = this._pullers["shift"]();
 
       if (f.push) {
-        this._buffer["push"](value);
+        this._buffer.push(value);
       }
 
       f.task.success(value);
       task.success(undefined);
 
     // If there is room in the buffer
-    } else if (this._buffer["length"] < this._limit) {
-      this._buffer["push"](value);
+    } else if (this._buffer.length < this._limit) {
+      this._buffer.push(value);
+      console.log("stream push buffer", this._buffer.length, this._limit);
       task.success(undefined);
 
     // Buffer is full
     } else {
+      console.log("stream push wait");
       this.full(task, value);
     }
   }
@@ -134,14 +145,17 @@ class StreamFixed extends StreamBase {
   }
 
   pull(task) {
+    console.log("----");
     // If there is stuff in the buffer
-    if (this._buffer["length"]) {
-      const value = this._buffer["shift"]();
+    if (this._buffer.length) {
+      console.log("stream pull buffer", this._buffer.length, this._limit);
+      const value = this._buffer.pull();
 
       // If there is a pending push
       if (this._pushers["length"]) {
+        console.log("stream pull push");
         const f = this._pushers["shift"]();
-        this._buffer["push"](f.value);
+        this._buffer.push(f.value);
         f.task.success(undefined);
       }
 
@@ -149,6 +163,7 @@ class StreamFixed extends StreamBase {
 
     // Buffer is empty, wait for push
     } else {
+      console.log("stream pull wait");
       this._pullers["push"]({
         push: false,
         task: task
@@ -168,8 +183,8 @@ class StreamFixed extends StreamBase {
 class StreamSliding extends StreamBase {
   full(task, value) {
     // TODO more efficient function for this
-    this._buffer["shift"]();
-    this._buffer["push"](value);
+    this._buffer.pull();
+    this._buffer.push(value);
     task.success(undefined);
   }
 }
@@ -181,6 +196,8 @@ class StreamDropping extends StreamBase {
   }
 }
 
+
+export const stream = () => stream_fixed(DEFAULT_BUFFER_SIZE);
 
 export const stream_fixed = (i) => (task) => {
   if (check_length(i)) {

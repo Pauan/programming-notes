@@ -20,11 +20,9 @@
   (FFI-IMPORT "FS"
     (read_file :: (-> String (Task (Stream String))))
 
-    (write_file :: (-> String (Task (Stream String))))
+    (write_file :: (-> String (Stream String) (Task Void)))
 
     (rename_file :: (-> String String (Task Void)))
-
-    #(is_directory :: (-> String (Task Boolean)))
 
     (stat_file :: (-> String (Task Stat)))
 
@@ -45,6 +43,6 @@
 (FUNCTION
   (copy-file! :: (-> String String (Task Void)))
   (copy-file! from to)
-    (pipe (read-file from)
-          (write-file! to)))
+    (DO from = (read-file from)
+      (write-file! to from)))
 ----

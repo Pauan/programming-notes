@@ -5,7 +5,8 @@
 
 (TYPE (Stream A))
 
-(EXPORT { stream/fixed = stream_fixed
+(EXPORT { stream
+          stream/fixed = stream_fixed
           stream/sliding = stream_sliding
           stream/dropping = stream_dropping
           peek
@@ -14,6 +15,9 @@
           stream/close! = close }
 
   (FFI-IMPORT "Stream"
+    (stream :: (FORALL A
+                 (-> (Task (Stream A)))))
+
     (stream_fixed :: (FORALL A
                        (-> Integer (Task (Stream A)))))
 
@@ -34,12 +38,6 @@
 
     (close :: (FORALL A
                 (-> (Stream A) (Task Void))))))
-
-(FUNCTION
-  (stream :: (FORALL A
-               (-> (Task (Stream A)))))
-  (stream)
-    (stream/fixed 1))
 
 (FUNCTION
   (w/in-stream :: (FORALL A
@@ -221,6 +219,20 @@
 
         # Accumulates and logs the sum of the merged stream
         (accumulate z))))
+
+
+# Using a single Stream
+(DO x = (stream)
+  (ignore
+    (concurrent
+      # Lazily generates the stream [0 1 2 3 4 ...]
+      (generate-add! x)
+
+      # Lazily generates the stream [1 2 4 8 16 ...]
+      (generate-multiply! x)
+
+      # Accumulates and logs the sum of the merged stream
+      (accumulate x))))
 ----
 
 

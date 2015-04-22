@@ -1,3 +1,86 @@
+// TODO this probably belongs in another module
+// TODO is this *actually* any faster than just using an array ?
+export class Queue {
+  constructor() {
+    this._left  = [];
+    this._right = [];
+    this.length = 0;
+  }
+
+  peek() {
+    return this._left[this._left["length"] - 1];
+  }
+
+  push(value) {
+    ++this.length;
+
+    if (this._left["length"]) {
+      this._right["push"](value);
+    } else {
+      this._left["push"](value);
+    }
+  }
+
+  pull() {
+    --this.length;
+
+    const left = this._left;
+
+    var value = left["pop"]();
+
+    if (left["length"] === 0) {
+      const right = this._right;
+
+      if (right["length"] > 1) {
+        // TODO faster function for this ?
+        right.reverse();
+      }
+
+      this._left = right;
+      this._right = left;
+    }
+
+    return value;
+  }
+}
+
+
+//const promise = Promise.resolve();
+
+const event_queue = new Queue();
+
+const event_queue_flush = () => {
+  while (event_queue.length) {
+    event_queue.pull()();
+  }
+};
+
+// TODO is this a good idea ? it's useful for stuff like Streams, but do we want *all* Tasks to behave this way ?
+// TODO use the asap polyfill ?
+const asap = (f) => {
+  //return f();
+
+  //promise["then"](f);
+
+  if (event_queue.length) {
+    event_queue.push(f);
+  } else {
+    event_queue.push(f);
+    setTimeout(event_queue_flush, 0);
+  }
+
+  /*event_queue["push"](f);
+
+  if (event_queue["length"] === 1) {
+
+  }*/
+  //return f();
+  //process.nextTick(f);
+  //setImmediate(f);
+  //setTimeout(f, 0);
+};
+
+
 class Task {
   constructor(onSuccess, onError, onCancel) {
     this._pending = true;
@@ -17,7 +100,7 @@ class Task {
       this._onCancel = null;
       this.onAbort = null; // TODO what if somebody sets onAbort after the Task is succeeded ?
 
-      f(value);
+      asap(() => f(value));
     }
   }
 
@@ -31,7 +114,7 @@ class Task {
       this._onCancel = null;
       this.onAbort = null; // TODO what if somebody sets onAbort after the Task is errored ?
 
-      f(e);
+      asap(() => f(e));
     }
   }
 
@@ -45,7 +128,7 @@ class Task {
       this._onCancel = null;
       this.onAbort = null; // TODO what if somebody sets onAbort after the Task is cancelled ?
 
-      f();
+      asap(f);
     }
   }
 
@@ -61,6 +144,7 @@ class Task {
 
       // Some tasks can't be aborted
       if (f !== null) {
+        // TODO should this use asap ?
         f();
       }
     }
