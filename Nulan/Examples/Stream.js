@@ -58,7 +58,6 @@ class StreamBase {
   }
 
   close(task) {
-    console.log("stream close");
     this.peek = closed_peek;
     this.pull = closed_pull;
     this.push = closed_push;
@@ -84,7 +83,6 @@ class StreamBase {
   }
 
   pull(task) {
-    console.log("stream pull");
     if (this._buffer.length) {
       task.success(this._buffer.pull());
 
@@ -97,10 +95,8 @@ class StreamBase {
   }
 
   push(task, value) {
-    console.log("----");
     // If there is a pending pull
     if (this._pullers["length"]) {
-      console.log("stream push pull");
       const f = this._pullers["shift"]();
 
       if (f.push) {
@@ -113,12 +109,10 @@ class StreamBase {
     // If there is room in the buffer
     } else if (this._buffer.length < this._limit) {
       this._buffer.push(value);
-      console.log("stream push buffer", this._buffer.length, this._limit);
       task.success(undefined);
 
     // Buffer is full
     } else {
-      console.log("stream push wait");
       this.full(task, value);
     }
   }
@@ -145,15 +139,12 @@ class StreamFixed extends StreamBase {
   }
 
   pull(task) {
-    console.log("----");
     // If there is stuff in the buffer
     if (this._buffer.length) {
-      console.log("stream pull buffer", this._buffer.length, this._limit);
       const value = this._buffer.pull();
 
       // If there is a pending push
       if (this._pushers["length"]) {
-        console.log("stream pull push");
         const f = this._pushers["shift"]();
         this._buffer.push(f.value);
         f.task.success(undefined);
@@ -163,7 +154,6 @@ class StreamFixed extends StreamBase {
 
     // Buffer is empty, wait for push
     } else {
-      console.log("stream pull wait");
       this._pullers["push"]({
         push: false,
         task: task

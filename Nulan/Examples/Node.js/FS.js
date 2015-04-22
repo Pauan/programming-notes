@@ -23,30 +23,26 @@ export const callback = (task) => (err, value) => {
 
 export const read_from_Node = (input, output) => (task) => {
   const cleanup = () => {
-    console.log("read cleanup");
     input["removeListener"]("end", onEnd);
     input["removeListener"]("error", onError);
     input["removeListener"]("readable", onReadable);
   };
 
   const onEnd = () => {
-    console.log("read onEnd");
     cleanup();
     // TODO is this correct ?
     run_root(close(output));
   };
 
   const onError = (e) => {
-    console.log("read onError");
     cleanup();
     close_error(output, e);
   };
 
   const onReadable = () => {
+    // TODO should this set a byte size for `read` ?
     const chunk = input["read"]();
-    console.log("read onReadable", chunk !== null);
     if (chunk !== null) {
-      console.log("read chunk");
       // TODO is it possible for a "readable" event to trigger even if `chunk` is not `null` ?
       // TODO is it possible for onEnd to be called after the Stream is closed, and thus double-close it ?
       run(push(output, chunk), onReadable, onError, onEnd);
@@ -66,27 +62,23 @@ export const read_from_Node = (input, output) => (task) => {
 
 export const write_to_Node = (input, output) => (task) => {
   const cleanup = () => {
-    console.log("write cleanup");
     output["removeListener"]("finish", onFinish);
     output["removeListener"]("error", onError);
     output["removeListener"]("drain", onDrain);
   };
 
   const onFinish = () => {
-    console.log("write onFinish");
     cleanup();
     // TODO is this correct ?
     run_root(close(input));
   };
 
   const onError = (e) => {
-    console.log("write onError");
     cleanup();
     close_error(input, e);
   };
 
   const onCancel = () => {
-    console.log("write onCancel");
     // TODO is this correct ?
     cleanup();
     // TODO is this correct ?
@@ -94,13 +86,9 @@ export const write_to_Node = (input, output) => (task) => {
   };
 
   const onDrain = () => {
-    console.log("write onDrain");
     run(pull(input), (value) => {
       if (output["write"](value, "utf8")) {
-        console.log("write wrote");
         onDrain();
-      } else {
-        console.log("write wait");
       }
     }, onError, onCancel);
   };
