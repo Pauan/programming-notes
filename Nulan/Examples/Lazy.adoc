@@ -1,20 +1,18 @@
 .Lazy.js
 [source,javascript]
 ----
-function lazy(f) {
-  return {
-    forced: false,
-    thunk: f
-  };
-}
+export const lazy = (f) => ({
+  forced: false,
+  thunk: f
+});
 
-function force(x) {
+export const force = (x) => {
   if (!x.forced) {
     x.thunk = x.thunk();
     x.forced = true;
   }
   return x.thunk;
-}
+};
 ----
 
 .Lazy.nu
