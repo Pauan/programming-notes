@@ -1,6 +1,7 @@
 import { run_root, _bind, _finally, on_cancel, ignore, success, log, concurrent, thread } from "./FFI/Task";
 import { push, pull, close, stream_fixed } from "./FFI/Stream";
-import { read_file, write_file } from "./Node.js/FFI/FS";
+import { read_file, write_file, files_from_directory_recursive } from "./Node.js/FFI/fs";
+import { is_hidden_file } from "./Node.js/FFI/path";
 
 const _void = () => undefined;
 
@@ -44,4 +45,7 @@ const now = (task) =>
   ignore_concurrent([read_file("/home/pauan/Scratch/2014-09-30", s),
                      stream_each(s, (x) => log(x))])));*/
 
-run_root(copy_file("/home/pauan/Scratch/2014-09-30", "/home/pauan/Scratch/tmp/foo"));
+//run_root(copy_file("/home/pauan/Scratch/2014-09-30", "/home/pauan/Scratch/tmp/foo"));
+
+run_root(_bind(files_from_directory_recursive("/home/pauan/Scratch"), (a) =>
+  log(a.filter((x) => !is_hidden_file(x)))));

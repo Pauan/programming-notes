@@ -1,4 +1,4 @@
-.FS.nu
+.fs.nu
 [source]
 ----
 (USE {} = "nulan:Task")
@@ -18,7 +18,7 @@
           files-from-directory = files_from_directory
           files-from-directory-recursive = files_from_directory_recursive }
 
-  (FFI-IMPORT "FS"
+  (FFI-IMPORT "fs"
     (read_file :: (-> String (Stream String) (Task Void)))
 
     (write_file :: (-> (Stream String) String (Task Void)))
@@ -41,6 +41,7 @@
 
     (files_from_directory_recursive :: (-> String (Task (List String))))))
 
+# TODO maybe allow for passing in a stream which will be used instead of creating a new one?
 (FUNCTION
   (copy-file! :: (-> String String (Task Void)))
   (copy-file! from to)
