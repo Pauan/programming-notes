@@ -1,16 +1,9 @@
-import { stream, push, pull, close } from "../../FFI/Stream"; // "nulan:Stream"
-import { _bind, run_root, run } from "../../FFI/Task"; // "nulan:Task"
+import { push, pull, close } from "../../FFI/Stream"; // "nulan:Stream"
+import { _bind, run, _finally } from "../../FFI/Task"; // "nulan:Task"
 
-var fs = require("fs");
-var path = require("path");
+const fs = require("fs");
+const path = require("path");
 
-
-const close_error = (stream, e) => {
-  // TODO is this correct ?
-  run_root(_bind(close(stream), (_) => (task) => {
-    task.error(e);
-  }));
-};
 
 export const callback = (task) => (err, value) => {
   if (err) {
@@ -22,30 +15,53 @@ export const callback = (task) => (err, value) => {
 
 
 export const read_from_Node = (input, output) => (task) => {
+  let finished = false;
+
   const cleanup = () => {
+    finished = true;
     input["removeListener"]("end", onEnd);
     input["removeListener"]("error", onError);
     input["removeListener"]("readable", onReadable);
   };
 
+  task.onAbort = (done) => {
+    if (!finished) {
+      cleanup();
+    }
+    done();
+  };
+
   const onEnd = () => {
-    cleanup();
-    // TODO is this correct ?
-    run_root(close(output));
+    if (!finished) {
+      cleanup();
+      task.success(undefined);
+    }
   };
 
   const onError = (e) => {
-    cleanup();
-    close_error(output, e);
+    if (!finished) {
+      cleanup();
+    }
+    task.error(e);
   };
 
   const onReadable = () => {
-    // TODO should this set a byte size for `read` ?
-    const chunk = input["read"]();
-    if (chunk !== null) {
-      // TODO is it possible for a "readable" event to trigger even if `chunk` is not `null` ?
-      // TODO is it possible for onEnd to be called after the Stream is closed, and thus double-close it ?
-      run(push(output, chunk), onReadable, onError, onEnd);
+    // TODO is this correct ?
+    if (!finished) {
+      // TODO should this set a byte size for `read` ?
+      const chunk = input["read"]();
+      if (chunk !== null) {
+        // TODO is it possible for a "readable" event to trigger even if `chunk` is not `null` ?
+        // TODO is it possible for onEnd to be called after the Stream is closed, and thus double-close it ?
+        const t = run(push(output, chunk), onReadable, onError, onEnd);
+
+        task.onAbort = (done) => {
+          if (!finished) {
+            cleanup();
+          }
+          t.abort(done);
+        };
+      }
     }
   };
 
@@ -56,41 +72,60 @@ export const read_from_Node = (input, output) => (task) => {
   input["on"]("readable", onReadable);
 
   onReadable();
-
-  task.success(output);
 };
 
 export const write_to_Node = (input, output) => (task) => {
+  let finished = false;
+
   const cleanup = () => {
+    finished = true;
     output["removeListener"]("finish", onFinish);
     output["removeListener"]("error", onError);
     output["removeListener"]("drain", onDrain);
-  };
-
-  const onFinish = () => {
-    cleanup();
-    // TODO is this correct ?
-    run_root(close(input));
-  };
-
-  const onError = (e) => {
-    cleanup();
-    close_error(input, e);
-  };
-
-  const onCancel = () => {
-    // TODO is this correct ?
-    cleanup();
     // TODO is this correct ?
     output["end"]();
   };
 
-  const onDrain = () => {
-    run(pull(input), (value) => {
+  task.onAbort = (done) => {
+    if (!finished) {
+      cleanup();
+    }
+    done();
+  };
+
+  const onFinish = () => {
+    if (!finished) {
+      cleanup();
+      task.success(undefined);
+    }
+  };
+
+  const onError = (e) => {
+    if (!finished) {
+      cleanup();
+    }
+    task.error(e);
+  };
+
+  const onSuccess = (value) => {
+    if (!finished) {
       if (output["write"](value, "utf8")) {
         onDrain();
       }
-    }, onError, onCancel);
+    }
+  };
+
+  const onDrain = () => {
+    if (!finished) {
+      const t = run(pull(input), onSuccess, onError, onFinish);
+
+      task.onAbort = (done) => {
+        if (!finished) {
+          cleanup();
+        }
+        t.abort(done);
+      };
+    }
   };
 
   // TODO this doesn't work
@@ -100,32 +135,63 @@ export const write_to_Node = (input, output) => (task) => {
   output["on"]("error", onError);
   output["on"]("drain", onDrain);
 
-  // TODO is this necessary ?
   onDrain();
-
-  task.success(undefined);
 };
 
 
-const fs_open = (path, flags) => (task) => {
-  fs["open"](path, flags, callback(task));
+const fs_close = (fd) => (task) {
+  fs["close"](fd, callback(task));
 };
 
-// TODO maybe have an `out` argument, rather than returning a new Stream
-export const read_file = (path) =>
-  _bind(fs_open(path, "r"), (fd) =>
-    _bind(stream(), (output) =>
-      read_from_Node(fs["createReadStream"](null, {
-        "encoding": "utf8",
-        "fd": fd
-      }), output)));
+const fs_open = (path, flags) => (task) {
+  let aborted = false;
+  let done = null;
 
-export const write_file = (path, input) =>
-  _bind(fs_open(path, "w"), (fd) =>
-    write_to_Node(input, fs["createWriteStream"](null, {
-      "encoding": "utf8",
-      "fd": fd
-    })));
+  fs["open"](path, flags, (err, fd) => {
+    if (aborted) {
+      if (err) {
+        task.error(err);
+        done();
+
+      } else {
+        fs["close"](fd, (err) => {
+          if (err) {
+            task.error(err);
+          }
+          done();
+        });
+      }
+
+    } else if (err) {
+      task.error(err);
+
+    } else {
+      task.success(fd);
+    }
+  });
+
+  task.onAbort = (f) => {
+    aborted = true;
+    done = f;
+  };
+};
+
+export const with_fs_open = (path, flags, f) =>
+  _bind(fs_open(path, flags), (fd) =>
+    _finally(f(fd), fs_close(fd)));
+
+export const read_file = (path, output) =>
+  with_fs_open(path, "r", (fd) =>
+    // TODO do we have to use `autoClose: false` ?
+    _finally(read_from_Node(fs["createReadStream"](null, { "encoding": "utf8", "fd": fd }), output),
+             close(output)));
+
+export const write_file = (input, path) =>
+  with_fn_open(path, "w", (fd) =>
+    // TODO createWriteStream doesn't have autoclose, do we have to manually `end` the stream ?
+    // TODO should this close the input ?
+    _finally(write_to_Node(input, fs["createWriteStream"](null, { "encoding": "utf8", "fd": fd })),
+             close(input)));
 
 export const rename_file = (from, to) => (task) => {
   fs["rename"](from, to, callback(task));
@@ -171,32 +237,36 @@ export const files_from_directory = (path) => (task) => {
 // TODO is it faster or slower to use `fs.stat` to check for a directory,
 //      rather than relying upon the error message ?
 export const files_from_directory_recursive = (file) => (task) => {
-  var out = [];
+  const out = [];
 
-  var pending = 0;
+  let pending = 0;
+
+  let aborted = false;
 
   function loop(files, parent, prefix) {
     pending += files["length"];
 
     files["forEach"](function (file) {
-      var new_parent = path["join"](parent, file);
-      var new_prefix = path["join"](prefix, file);
+      const new_parent = path["join"](parent, file);
+      const new_prefix = path["join"](prefix, file);
 
       fs["readdir"](new_parent, function (err, files) {
         if (err) {
           if (err["code"] === "ENOTDIR") {
-            out["push"](new_prefix);
+            if (!aborted) {
+              out["push"](new_prefix);
 
-            --pending;
-            if (pending === 0) {
-              task.success(out);
+              --pending;
+              if (pending === 0) {
+                task.success(out);
+              }
             }
 
           } else {
             task.error(err);
           }
 
-        } else {
+        } else if (!aborted) {
           --pending;
           loop(files, new_parent, new_prefix);
         }
@@ -207,8 +277,14 @@ export const files_from_directory_recursive = (file) => (task) => {
   fs["readdir"](file, function (err, files) {
     if (err) {
       task.error(err);
-    } else {
+
+    } else if (!aborted) {
       loop(files, file, "");
     }
   });
+
+  task.onAbort = (done) => {
+    aborted = true;
+    done();
+  };
 };

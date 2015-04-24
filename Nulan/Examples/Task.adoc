@@ -12,6 +12,7 @@
           on-cancel = on_cancel
           execute
           ignore
+          # TODO get rid of all thread stuff ?
           thread
           thread/wait = thread_wait
           thread/kill! = thread_kill
@@ -100,4 +101,10 @@
                 (-> Integer (Task Void) (Task Void))))
   (timeout ms task)
     (race task (delay ms)))
+
+(FUNCTION
+  (ignore/concurrent :: (FORALL A
+                          (-> @(Task A) (Task Void))))
+  (ignore-concurrent @in)
+    (ignore (concurrent @in)))
 ----

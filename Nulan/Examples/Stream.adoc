@@ -5,8 +5,7 @@
 
 (TYPE (Stream A))
 
-(EXPORT { stream
-          stream/fixed = stream_fixed
+(EXPORT { stream/fixed = stream_fixed
           stream/sliding = stream_sliding
           stream/dropping = stream_dropping
           peek
@@ -15,9 +14,6 @@
           stream/close! = close }
 
   (FFI-IMPORT "Stream"
-    (stream :: (FORALL A
-                 (-> (Task (Stream A)))))
-
     (stream_fixed :: (FORALL A
                        (-> Integer (Task (Stream A)))))
 
@@ -40,6 +36,12 @@
                 (-> (Stream A) (Task Void))))))
 
 (FUNCTION
+  (stream :: (FORALL A
+               (-> (Task (Stream A)))))
+  (stream)
+    (stream/fixed 5))
+
+(FUNCTION
   (w/in-stream :: (FORALL A
                     (-> (Task A)
                         (Task Void))))
@@ -60,6 +62,7 @@
              (stream/close! out)))
 
 # TODO find a better name for this
+# TODO maybe get rid of this ?
 (FUNCTION
   (stream/generate :: (FORALL A B
                         (-> (Stream A)
@@ -151,10 +154,9 @@
   (stream/flatten! in out)
     (w/out-stream out
       (stream/each! in -> value
-        (ignore
-          (sequence
-            @(map value -> value
-               (push! value out)))))))
+        (ignore-sequence
+          @(map value -> value
+             (push! value out))))))
 ----
 
 .Examples
@@ -206,31 +208,29 @@
     y = (stream)
     z = (stream)
 
-    (ignore
-      (concurrent
-        # Lazily generates the stream [0 1 2 3 4 ...]
-        (generate-add! x)
-
-        # Lazily generates the stream [1 2 4 8 16 ...]
-        (generate-multiply! y)
-
-        # Merges the two streams in a non-deterministic fashion
-        (stream/merge! x y z)
-
-        # Accumulates and logs the sum of the merged stream
-        (accumulate z))))
-
-
-# Using a single Stream
-(DO x = (stream)
-  (ignore
-    (concurrent
+    (ignore-concurrent
       # Lazily generates the stream [0 1 2 3 4 ...]
       (generate-add! x)
 
       # Lazily generates the stream [1 2 4 8 16 ...]
-      (generate-multiply! x)
+      (generate-multiply! y)
+
+      # Merges the two streams in a non-deterministic fashion
+      (stream/merge! x y z)
 
       # Accumulates and logs the sum of the merged stream
-      (accumulate x))))
+      (accumulate z)))
+
+
+# Using a single Stream
+(DO x = (stream)
+  (ignore-concurrent
+    # Lazily generates the stream [0 1 2 3 4 ...]
+    (generate-add! x)
+
+    # Lazily generates the stream [1 2 4 8 16 ...]
+    (generate-multiply! x)
+
+    # Accumulates and logs the sum of the merged stream
+    (accumulate x)))
 ----

@@ -6,7 +6,7 @@
 
 (TYPE Stat)
 
-(EXPORT { read-file = read_file
+(EXPORT { read-file! = read_file
           write-file! = write_file
           rename-file! = rename_file
           symlink!
@@ -14,13 +14,14 @@
           remove-file! = remove_file
           remove-directory! = remove_directory
           make-directory! = make_directory
+          # TODO maybe use a Stream rather than a List, in case the directory is very huge ?
           files-from-directory = files_from_directory
           files-from-directory-recursive = files_from_directory_recursive }
 
   (FFI-IMPORT "FS"
-    (read_file :: (-> String (Task (Stream String))))
+    (read_file :: (-> String (Stream String) (Task Void)))
 
-    (write_file :: (-> String (Stream String) (Task Void)))
+    (write_file :: (-> (Stream String) String (Task Void)))
 
     (rename_file :: (-> String String (Task Void)))
 
@@ -43,6 +44,8 @@
 (FUNCTION
   (copy-file! :: (-> String String (Task Void)))
   (copy-file! from to)
-    (DO from = (read-file from)
-      (write-file! to from)))
+    (DO s = (stream)
+      (ignore-concurrent
+        (read-file! from s)
+        (write-file! s to))))
 ----

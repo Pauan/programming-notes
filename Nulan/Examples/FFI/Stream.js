@@ -1,7 +1,5 @@
-import { Queue } from "./Task"; // "nulan:Task"
+import { Queue, array_remove } from "./Util";
 
-
-export const DEFAULT_BUFFER_SIZE = 5;
 
 const check_length = (i) => {
   // TODO should we allow for a buffer of size 0 ?
@@ -41,7 +39,7 @@ const closed_close = (task) => {
 class StreamBase {
   constructor(limit) {
     this._limit = limit;
-    this._pullers = [];
+    this._pullers = []; // TODO maybe use a Queue ?
     this._buffer = new Queue();
   }
 
@@ -75,10 +73,17 @@ class StreamBase {
       task.success(this._buffer.peek());
 
     } else {
-      this._pullers["push"]({
+      const info = {
         push: true,
         task: task
-      });
+      };
+
+      this._pullers["push"](info);
+
+      task.onAbort = (done) => {
+        remove_array(this._pullers, info);
+        done();
+      };
     }
   }
 
@@ -87,10 +92,17 @@ class StreamBase {
       task.success(this._buffer.pull());
 
     } else {
-      this._pullers["push"]({
+      const info = {
         push: false,
         task: task
-      });
+      };
+
+      this._pullers["push"](info);
+
+      task.onAbort = (done) => {
+        remove_array(this._pullers, info);
+        done();
+      };
     }
   }
 
@@ -122,7 +134,7 @@ class StreamBase {
 class StreamFixed extends StreamBase {
   constructor(limit) {
     super(limit);
-    this._pushers = [];
+    this._pushers = []; // TODO maybe use a Queue ?
   }
 
   cleanup() {
@@ -154,18 +166,32 @@ class StreamFixed extends StreamBase {
 
     // Buffer is empty, wait for push
     } else {
-      this._pullers["push"]({
+      const info = {
         push: false,
         task: task
-      });
+      };
+
+      this._pullers["push"](info);
+
+      task.onAbort = (done) => {
+        array_remove(this._pullers, info);
+        done();
+      };
     }
   }
 
   full(task, value) {
-    this._pushers["push"]({
+    const info = {
       value: value,
       task: task
-    });
+    };
+
+    this._pushers["push"](info);
+
+    task.onAbort = (done) => {
+      array_remove(this._pushers, info);
+      done();
+    };
   }
 }
 
@@ -186,8 +212,6 @@ class StreamDropping extends StreamBase {
   }
 }
 
-
-export const stream = () => stream_fixed(DEFAULT_BUFFER_SIZE);
 
 export const stream_fixed = (i) => (task) => {
   if (check_length(i)) {

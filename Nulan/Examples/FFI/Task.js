@@ -1,48 +1,4 @@
-// TODO this probably belongs in another module
-// TODO is this *actually* any faster than just using an array ?
-export class Queue {
-  constructor() {
-    this._left  = [];
-    this._right = [];
-    this.length = 0;
-  }
-
-  peek() {
-    return this._left[this._left["length"] - 1];
-  }
-
-  push(value) {
-    ++this.length;
-
-    if (this._left["length"]) {
-      this._right["push"](value);
-    } else {
-      this._left["push"](value);
-    }
-  }
-
-  pull() {
-    --this.length;
-
-    const left = this._left;
-
-    var value = left["pop"]();
-
-    if (left["length"] === 0) {
-      const right = this._right;
-
-      if (right["length"] > 1) {
-        // TODO faster function for this ?
-        right.reverse();
-      }
-
-      this._left = right;
-      this._right = left;
-    }
-
-    return value;
-  }
-}
+import { Queue, array_remove } from "./Util";
 
 
 //const promise = Promise.resolve();
@@ -81,6 +37,11 @@ const asap = (f) => {
 };
 
 
+const print_finished_error = (s) => {
+  // TODO code duplication with print_error
+  console["error"]("=".repeat(50) + "\n" + s + "\n" + "=".repeat(50));
+};
+
 class Task {
   constructor(onSuccess, onError, onCancel) {
     this._pending = true;
@@ -101,6 +62,11 @@ class Task {
       this.onAbort = null; // TODO what if somebody sets onAbort after the Task is succeeded ?
 
       asap(() => f(value));
+
+    } else {
+      // TODO if the task is aborted, it probably shouldn't print an error message
+      // TODO pretty printing
+      print_finished_error("A SUCCESS OCCURRED AFTER THE TASK WAS FINISHED!\n\n" + value);
     }
   }
 
@@ -115,6 +81,11 @@ class Task {
       this.onAbort = null; // TODO what if somebody sets onAbort after the Task is errored ?
 
       asap(() => f(e));
+
+    // This is to make sure that errors are *never* silently ignored
+    } else {
+      // TODO code duplication with print_error
+      print_finished_error("AN ERROR OCCURRED AFTER THE TASK WAS FINISHED!\n\n" + e["stack"]);
     }
   }
 
@@ -129,10 +100,13 @@ class Task {
       this.onAbort = null; // TODO what if somebody sets onAbort after the Task is cancelled ?
 
       asap(f);
+
+    } else {
+      print_finished_error("A CANCEL OCCURRED AFTER THE TASK WAS FINISHED!");
     }
   }
 
-  abort() {
+  abort(done) {
     if (this._pending) {
       const f = this.onAbort;
 
@@ -144,9 +118,17 @@ class Task {
 
       // Some tasks can't be aborted
       if (f !== null) {
-        // TODO should this use asap ?
-        f();
+        // We cannot use asap for this, or it will potentially cause problems (e.g. _finally)
+        f(done);
+
+      } else {
+        // We cannot use asap for this, or it will potentially cause problems (e.g. _finally)
+        done();
       }
+
+    } else {
+      // We cannot use asap for this, or it will potentially cause problems (e.g. _finally)
+      done();
     }
   }
 }
@@ -154,8 +136,9 @@ class Task {
 
 const PENDING   = 0;
 const SUCCEEDED = 1;
-const CANCELLED = 2;
-const ABORTED   = 3;
+const ERRORED   = 2;
+const CANCELLED = 3;
+const ABORTED   = 4;
 
 class Thread {
   constructor(task) {
@@ -165,7 +148,7 @@ class Thread {
 
     this._task = run(task, (value) => {
       if (this._state === PENDING) {
-        const f = this._listeners;
+        const a = this._listeners;
 
         this._state = SUCCEEDED;
         this._value = value;
@@ -173,32 +156,32 @@ class Thread {
         this._task = null;
 
         // TODO this can be made a bit faster
-        f["forEach"]((x) => { x.success(value) });
+        a["forEach"]((x) => { x.success(value) });
       }
 
     }, (e) => {
       if (this._state === PENDING) {
-        this._cancel();
+        this._cancel(ERRORED);
         print_error(e);
       }
 
     }, () => {
       if (this._state === PENDING) {
-        this._cancel();
+        this._cancel(CANCELLED);
       }
     });
   }
 
-  _cancel() {
-    const f = this._listeners;
+  _cancel(new_state) {
+    const a = this._listeners;
 
     // TODO verify that _value is null ?
-    this._state = CANCELLED;
+    this._state = new_state;
     this._listeners = null;
     this._task = null;
 
     // TODO this can be made a bit faster
-    f["forEach"]((x) => { x.cancel() });
+    a["forEach"]((x) => { x.cancel() });
   }
 
   wait(task) {
@@ -207,14 +190,10 @@ class Thread {
       this._listeners["push"](task);
 
       // TODO test this
-      task.onAbort = () => {
+      task.onAbort = (done) => {
         // TODO is it possible for this to be called after `_listeners` is set to `null` ?
-        // TODO replace with faster `remove` function
-        const i = this._listeners["indexOf"](task);
-        // TODO assert that `i` is never `-1` ?
-        if (i !== -1) {
-          this._listeners["splice"](i, 1);
-        }
+        remove_array(this._listeners, task);
+        done();
       };
       break;
 
@@ -222,21 +201,20 @@ class Thread {
       task.success(this._value);
       break;
 
-    case CANCELLED:
-      task.cancel();
-      break;
-
     // TODO is this correct ?
+    case CANCELLED:
+    case ERRORED:
     case ABORTED:
       task.cancel();
       break;
     }
   }
 
-  kill() {
-    if (this._state === PENDING) {
+  kill(task) {
+    switch (this._state) {
+    case PENDING:
       const t = this._task;
-      const f = this._listeners;
+      const a = this._listeners;
 
       // TODO verify that _value is null ?
       this._state = ABORTED;
@@ -244,10 +222,22 @@ class Thread {
       this._task = null;
 
       // TODO this can be made a bit faster
-      f["forEach"]((x) => { x.cancel() });
+      a["forEach"]((x) => { x.cancel() });
 
       // TODO should this be before or after cancelling the listeners ?
-      t.abort();
+      t.abort(() => { task.success(undefined) });
+      break;
+
+    // TODO is this correct ?
+    case SUCCESS:
+    case ERRORED:
+    case CANCELLED:
+      task.success(undefined);
+      break;
+
+    case ABORTED:
+      task.error(new Error("Cannot kill thread: thread is already killed"));
+      break;
     }
   }
 }
@@ -318,17 +308,19 @@ export const _bind = (x, f) => (task) => {
       task.success(value);
     }, error, cancel);
 
-    task.onAbort = () => {
-      t2.abort();
+    task.onAbort = (done) => {
+      t2.abort(done);
     };
   }, error, cancel);
 
-  task.onAbort = () => {
-    t1.abort();
+  task.onAbort = (done) => {
+    t1.abort(done);
   };
 };
 
 export const _finally = (before, after) => (task) => {
+  let aborted = false;
+
   const error = (e) => {
     task.error(e);
   };
@@ -338,24 +330,46 @@ export const _finally = (before, after) => (task) => {
   };
 
   const t1 = run(before, (value) => {
-    // This task is run no matter what, even if it is aborted
-    run(after, (_) => {
-      task.success(value);
-    }, error, cancel);
+    if (!aborted) {
+      // This task is run no matter what, even if it is aborted
+      run(after, (_) => {
+        task.success(value);
+      }, error, cancel);
+    }
 
   }, (e) => {
-    // Errors have precedence over cancellations
-    const propagate = () => {
-      task.error(e);
-    };
+    if (!aborted) {
+      // Errors have precedence over cancellations
+      const propagate = () => {
+        task.error(e);
+      };
 
-    // This task is run no matter what, even if it is aborted
-    run(after, propagate, error, propagate);
-  }, cancel);
+      // This task is run no matter what, even if it is aborted
+      run(after, propagate, error, propagate);
+    }
 
-  // TODO should this run the `after` task ?
-  task.onAbort = () => {
-    t1.abort();
+  }, () => {
+    if (!aborted) {
+      // This task is run no matter what, even if it is aborted
+      run(after, cancel, error, cancel);
+    }
+  });
+
+  task.onAbort = (done) => {
+    aborted = true;
+
+    t1.abort(() => {
+      // This task is run no matter what, even if it is aborted
+      // Because the task was aborted, there's no point in returning anything
+      run(after, (_) => {
+        done();
+
+      }, (e) => {
+        task.error(e);
+        done();
+
+      }, done);
+    });
   };
 };
 
@@ -374,13 +388,13 @@ export const on_cancel = (x, y) => (task) => {
     });
 
     // TODO should this abort ?
-    task.onAbort = () => {
-      t2.abort();
+    task.onAbort = (done) => {
+      t2.abort(done);
     };
   });
 
-  task.onAbort = () => {
-    t1.abort();
+  task.onAbort = (done) => {
+    t1.abort(done);
   };
 };
 
@@ -405,8 +419,8 @@ export const ignore = (x) => (task) => {
     task.cancel();
   });
 
-  task.onAbort = () => {
-    t.abort();
+  task.onAbort = (done) => {
+    t.abort(done);
   };
 };
 
@@ -426,10 +440,17 @@ export const thread_kill = (x) => (task) => {
   task.success(undefined);
 };
 
-const abortAll = (tasks) => {
+export const abortAll = (tasks, done) => {
+  let pending = tasks["length"];
+
   // TODO is it faster to use a var or a let ?
   for (let i = 0; i < tasks["length"]; ++i) {
-    tasks[i].abort();
+    tasks[i].abort(() => {
+      --pending;
+      if (pending === 0) {
+        done();
+      }
+    });
   }
 };
 
@@ -444,25 +465,34 @@ export const concurrent = (a) => (task) => {
   let failed = false;
 
   const onSuccess = () => {
-    --pending;
-    if (pending === 0) {
-      task.success(out);
+    if (!failed) {
+      --pending;
+      if (pending === 0) {
+        task.success(out);
+      }
     }
   };
 
   const onError = (e) => {
+    // Always emit all the errors
+    // The error that is emitted first is non-deterministic
     failed = true;
-    abortAll(tasks);
-    task.error(e);
+    abortAll(tasks, () => {
+      task.error(e);
+    });
   };
 
   const onCancel = () => {
-    failed = true;
-    abortAll(tasks);
-    task.cancel();
+    if (!failed) {
+      failed = true;
+      abortAll(tasks, () => {
+        task.cancel();
+      });
+    }
   };
 
   for (let i = 0; i < a["length"]; ++i) {
+    // TODO this probably isn't needed anymore, but keep it just in case ?
     if (failed) {
       break;
 
@@ -476,8 +506,15 @@ export const concurrent = (a) => (task) => {
     }
   }
 
-  task.onAbort = () => {
-    abortAll(tasks);
+  task.onAbort = (done) => {
+    // TODO is this correct ?
+    if (failed) {
+      done();
+
+    } else {
+      failed = true;
+      abortAll(tasks, done);
+    }
   };
 };
 
@@ -488,26 +525,36 @@ export const race = (a) => (task) => {
   let done = false;
 
   const onSuccess = (value) => {
-    done = true;
-    abortAll(tasks);
-    task.success(value);
+    if (!done) {
+      done = true;
+      abortAll(tasks, () => {
+        task.success(value);
+      });
+    }
   };
 
   const onError = (e) => {
+    // Always emit all the errors
+    // The error that is emitted first is non-deterministic
     done = true;
-    abortAll(tasks);
-    task.error(e);
+    abortAll(tasks, () => {
+      task.error(e);
+    });
   };
 
   // TODO should it only cancel if all the tasks fail ?
   const onCancel = () => {
-    done = true;
-    abortAll(tasks);
-    task.cancel();
+    if (!done) {
+      done = true;
+      abortAll(tasks, () => {
+        task.cancel();
+      });
+    }
   };
 
   // TODO is it faster to use var or let ?
   for (let i = 0; i < a["length"]; ++i) {
+    // TODO this probably isn't needed anymore, but keep it just in case ?
     if (done) {
       break;
 
@@ -516,8 +563,15 @@ export const race = (a) => (task) => {
     }
   }
 
-  task.onAbort = () => {
-    abortAll(tasks);
+  task.onAbort = (f) => {
+    // TODO is this correct ?
+    if (done) {
+      f();
+
+    } else {
+      done = true;
+      abortAll(tasks, f);
+    }
   };
 };
 
@@ -528,8 +582,9 @@ export const delay = (ms) => (task) => {
     task.success(undefined);
   }, ms);
 
-  task.onAbort = () => {
+  task.onAbort = (done) => {
     clearTimeout(timer);
+    done();
   };
 };
 
