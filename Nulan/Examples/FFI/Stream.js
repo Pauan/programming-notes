@@ -50,6 +50,8 @@ class StreamBase {
     this._pullers = null;
 
     // TODO is it faster to use var or let ?
+    // This cancels any pending peek/pull
+    // This only happens if the buffer is empty
     for (let i = 0; i < a["length"]; ++i) {
       a[i].task.cancel();
     }

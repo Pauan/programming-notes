@@ -79,11 +79,14 @@ export const write_to_Node = (input, output) => (task) => {
 
   const cleanup = () => {
     finished = true;
+    // Because Node.js is stupid and doesn't have "autoClose" for
+    // `fs.createWriteStream`, we instead have to set this to prevent
+    // Node.js from closing the file descriptor
+    // TODO this fix might no longer work in future versions of Node.js
+    output["closed"] = true;
     output["removeListener"]("finish", onFinish);
     output["removeListener"]("error", onError);
     output["removeListener"]("drain", onDrain);
-    // TODO is this correct ?
-    output["end"]();
   };
 
   task.onAbort = (done) => {
@@ -93,9 +96,19 @@ export const write_to_Node = (input, output) => (task) => {
     done();
   };
 
+  // TODO is this correct? maybe get rid of the "finish" event entirely ?
   const onFinish = () => {
     if (!finished) {
       cleanup();
+    }
+    task.error(new Error("This should never happen"));
+  };
+
+  const onCancel = () => {
+    if (!finished) {
+      cleanup();
+      // TODO is this correct ?
+      output["end"]();
       task.success(undefined);
     }
   };
@@ -117,7 +130,7 @@ export const write_to_Node = (input, output) => (task) => {
 
   const onDrain = () => {
     if (!finished) {
-      const t = run(pull(input), onSuccess, onError, onFinish);
+      const t = run(pull(input), onSuccess, onError, onCancel);
 
       task.onAbort = (done) => {
         if (!finished) {
@@ -139,11 +152,11 @@ export const write_to_Node = (input, output) => (task) => {
 };
 
 
-const fs_close = (fd) => (task) {
+const fs_close = (fd) => (task) => {
   fs["close"](fd, callback(task));
 };
 
-const fs_open = (path, flags) => (task) {
+const fs_open = (path, flags) => (task) => {
   let aborted = false;
   let done = null;
 
@@ -182,16 +195,12 @@ export const with_fs_open = (path, flags, f) =>
 
 export const read_file = (path, output) =>
   with_fs_open(path, "r", (fd) =>
-    // TODO do we have to use `autoClose: false` ?
-    _finally(read_from_Node(fs["createReadStream"](null, { "encoding": "utf8", "fd": fd }), output),
-             close(output)));
+   _finally(read_from_Node(fs["createReadStream"](null, { "encoding": "utf8", "fd": fd, "autoClose": false }), output),
+            close(output)));
 
 export const write_file = (input, path) =>
-  with_fn_open(path, "w", (fd) =>
-    // TODO createWriteStream doesn't have autoclose, do we have to manually `end` the stream ?
-    // TODO should this close the input ?
-    _finally(write_to_Node(input, fs["createWriteStream"](null, { "encoding": "utf8", "fd": fd })),
-             close(input)));
+  with_fs_open(path, "w", (fd) =>
+    write_to_Node(input, fs["createWriteStream"](null, { "encoding": "utf8", "fd": fd })));
 
 export const rename_file = (from, to) => (task) => {
   fs["rename"](from, to, callback(task));

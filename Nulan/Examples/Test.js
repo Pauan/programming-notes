@@ -5,7 +5,7 @@ import { read_file, write_file } from "./Node.js/FFI/FS";
 const _void = () => undefined;
 
 const ignore_concurrent = (a) =>
-  ignore(concurrent());
+  ignore(concurrent(a));
 
 const forever = (task) =>
   _bind(task, (_) => forever(task));
@@ -39,5 +39,9 @@ const now = (task) =>
                thread(forever(pull(s))))));*/
 
 //run_root(forever(_bind(now, (now) => log(now))));
+
+/*run_root(_bind(stream_fixed(5), (s) =>
+  ignore_concurrent([read_file("/home/pauan/Scratch/2014-09-30", s),
+                     stream_each(s, (x) => log(x))])));*/
 
 run_root(copy_file("/home/pauan/Scratch/2014-09-30", "/home/pauan/Scratch/tmp/foo"));
