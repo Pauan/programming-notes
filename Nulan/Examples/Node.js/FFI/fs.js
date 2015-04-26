@@ -1,5 +1,5 @@
 import { push, pull, close } from "../../FFI/Stream"; // "nulan:Stream"
-import { _bind, run, _finally } from "../../FFI/Task"; // "nulan:Task"
+import { run, _finally, with_resource } from "../../FFI/Task"; // "nulan:Task"
 
 const _fs   = require("fs");
 const _path = require("path");

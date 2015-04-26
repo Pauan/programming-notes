@@ -42,6 +42,7 @@
     (files_from_directory_recursive :: (-> String (Task (List String))))))
 
 # TODO maybe allow for passing in a stream which will be used instead of creating a new one?
+# TODO store to a temporary file so that it will work even if `from` and `to` are the same ?
 (FUNCTION
   (copy-file! :: (-> String String (Task Void)))
   (copy-file! from to)

@@ -108,9 +108,9 @@ const increment = (i) =>
 
 //_bind(current_time, log)
 
-const main = () =>
+/*const main = () =>
   race([increment(0),
-        delay(1000)]);
+        delay(1000)]);*/
 
 /*const main = () =>
   forever(log_current_time(10));*/
@@ -137,8 +137,8 @@ setTimeout(() => {
     ignore_concurrent([read_file("/home/pauan/Scratch/2014-09-30", s),
                        stream_each(s, (x) => log(x))]));*/
 
-/*const main = () =>
-  copy_file("/home/pauan/Scratch/2014-09-30", "/home/pauan/Scratch/tmp/foo");*/
+const main = () =>
+  copy_file("/home/pauan/Scratch/2014-09-30", "/home/pauan/Scratch/tmp/foo");
 
 /*const main = () =>
   _bind(files_from_directory_recursive("/home/pauan/Scratch"), (a) =>
