@@ -14,8 +14,6 @@ const print_finished_error = (e) => {
 
 //const promise = Promise.resolve();
 
-const event_queue = new Queue();
-
 
 // For Node.js only
 if (typeof process === "object" && typeof process["on"] === "function") {
@@ -38,9 +36,14 @@ if (typeof process === "object" && typeof process["on"] === "function") {
 }
 
 
-const event_queue_flush = () => {
-  while (event_queue.length) {
-    event_queue.pull()();
+const task_queue = new Queue();
+
+// Arbitrary number, just so long as it's big enough for normal use cases
+const TASK_QUEUE_MAX_CAPACITY = 1024;
+
+const task_queue_flush = () => {
+  while (task_queue.length !== 0) {
+    task_queue.pull()();
   }
 };
 
@@ -51,18 +54,23 @@ const asap = (f) => {
 
   //promise["then"](f);
 
-  if (event_queue.length === 0) {
-    event_queue.push(f);
-    nextTick(event_queue_flush);
+  // TODO this is necessary to stop infinite loops, but is there a better way ?
+  nextTick(f);
+
+  /*if (task_queue.length === 0) {
+    task_queue.push(f);
+    nextTick(task_queue_flush);
   } else {
-    event_queue.push(f);
+    task_queue.push(f);
   }
 
-  /*event_queue["push"](f);
-
-  if (event_queue["length"] === 1) {
-
+  // Warn if the task queue gets too big
+  if (task_queue.length > TASK_QUEUE_MAX_CAPACITY) {
+    console["warn"]("Task queue has " + task_queue.length +
+                    " items, which is greater than the max capacity of " +
+                    TASK_QUEUE_MAX_CAPACITY);
   }*/
+
   //return f();
   //process.nextTick(f);
   //setImmediate(f);
@@ -72,11 +80,12 @@ const asap = (f) => {
 
 let RUNNING_TASKS = 0;
 
-const PENDING   = 0;
-const SUCCEEDED = 1;
-const ERRORED   = 2;
-const CANCELLED = 3;
-const ABORTED   = 4;
+// TODO is using `| 0` a good idea? is there a better way to get Chrome to treat them as a small uint ?
+const PENDING   = 0 | 0;
+const SUCCEEDED = 1 | 0;
+const ERRORED   = 2 | 0;
+const CANCELLED = 3 | 0;
+const ABORTED   = 4 | 0;
 
 class Task {
   constructor(onSuccess, onError, onCancel) {

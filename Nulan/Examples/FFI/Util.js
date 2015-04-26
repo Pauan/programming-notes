@@ -27,21 +27,21 @@ export class Queue {
   }
 
   push(value) {
-    ++this.length;
-
-    if (this._left["length"]) {
-      this._right["push"](value);
-    } else {
+    if (this.length === 0) {
       this._left["push"](value);
+    } else {
+      this._right["push"](value);
     }
+
+    ++this.length;
   }
 
   pull() {
-    --this.length;
-
     const left = this._left;
 
     var value = left["pop"]();
+
+    --this.length;
 
     if (left["length"] === 0) {
       const right = this._right;

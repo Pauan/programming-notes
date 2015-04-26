@@ -83,6 +83,10 @@ const log_current_time = (max) => {
 };
 
 
+const increment = (i) =>
+  _bind(log(i), (_) => increment(i + 1));
+
+
 //////////////////////////////////////////////////////////////////////////////
 
 
@@ -105,9 +109,11 @@ const log_current_time = (max) => {
 //_bind(current_time, log)
 
 const main = () =>
-  race([forever(success(5)),
-        _bind(delay(1000), (_) =>
-          log("done"))]);
+  race([increment(0),
+        delay(1000)]);
+
+/*const main = () =>
+  forever(log_current_time(10));*/
 
 /*const main = () =>
   race([log_current_time(10),
