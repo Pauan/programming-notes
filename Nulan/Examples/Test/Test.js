@@ -1,7 +1,7 @@
-import { run_root, _bind, _finally, on_cancel, ignore, success, log, concurrent, thread, delay, race, thread_kill, run } from "./FFI/Task";
-import { push, pull, close, stream_fixed } from "./FFI/Stream";
-import { read_file, write_file, files_from_directory_recursive } from "./Node.js/FFI/fs";
-import { is_hidden_file } from "./Node.js/FFI/path";
+import { run_root, _bind, _finally, on_cancel, ignore, success, log, concurrent, thread, delay, race, thread_kill, run } from "../FFI/Task";
+import { push, pull, close, stream_fixed } from "../FFI/Stream";
+import { read_file, write_file, files_from_directory_recursive } from "../Node.js/FFI/fs";
+import { is_hidden_file } from "../Node.js/FFI/path";
 
 
 const debug = (s, x) => {
