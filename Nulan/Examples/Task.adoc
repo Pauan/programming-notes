@@ -10,6 +10,7 @@
           never
           finally = _finally
           on-cancel = on_cancel
+          w/resource
           execute
           ignore
           # TODO get rid of all thread stuff ?
@@ -22,7 +23,7 @@
           log }
 
   (FFI-IMPORT "Task"
-    (run_root :: (-> (Task Void) Void))
+    (run_root :: (-> (-> (Task Void)) Void))
 
     (success :: (FORALL A
                   (-> A (Task A))))
@@ -40,6 +41,12 @@
                 (-> (Task A)
                     (-> A (Task B))
                     (Task B))))
+
+    (with_resource :: (FORALL A B
+                        (-> (Task A)
+                            (-> A (Task B))
+                            (-> A (Task Void))
+                            (Task B))))
 
     (_finally :: (FORALL A
                    (-> (Task A)
@@ -80,7 +87,13 @@
   # TODO is there a better way of handling this ?
   (MACRO
     (FFI-PROGRAM-START)
-      `(run_root (,(symbol "main"))))
+      `(run_root ,(symbol "main")))
+
+  (MACRO
+    (w/resource `(,name = ,before) during after)
+      `(with_resource ,before
+         (-> ,name ,during)
+         (-> ,name ,after)))
 
   (IMPLEMENT Task
     (wrap x)
@@ -103,8 +116,14 @@
     (race task (delay ms)))
 
 (FUNCTION
-  (ignore/concurrent :: (FORALL A
+  (ignore-concurrent :: (FORALL A
                           (-> @(Task A) (Task Void))))
   (ignore-concurrent @in)
     (ignore (concurrent @in)))
+
+(FUNCTION
+  (ignore-thread :: (FORALL A
+                      (-> (Task A) (Task Void))))
+  (ignore-thread task)
+    (ignore (thread task)))
 ----

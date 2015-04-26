@@ -82,9 +82,9 @@ class StreamBase {
 
       this._pullers["push"](info);
 
-      task.onAbort = (done) => {
+      task.onAbort = () => {
+        // TODO is it possible for `this._pullers` to be `null` ?
         remove_array(this._pullers, info);
-        done();
       };
     }
   }
@@ -101,9 +101,9 @@ class StreamBase {
 
       this._pullers["push"](info);
 
-      task.onAbort = (done) => {
+      task.onAbort = () => {
+        // TODO is it possible for `this._pullers` to be `null` ?
         remove_array(this._pullers, info);
-        done();
       };
     }
   }
@@ -175,9 +175,9 @@ class StreamFixed extends StreamBase {
 
       this._pullers["push"](info);
 
-      task.onAbort = (done) => {
+      task.onAbort = () => {
+        // TODO is it possible for `this._pullers` to be `null` ?
         array_remove(this._pullers, info);
-        done();
       };
     }
   }
@@ -190,9 +190,9 @@ class StreamFixed extends StreamBase {
 
     this._pushers["push"](info);
 
-    task.onAbort = (done) => {
+    task.onAbort = () => {
+      // TODO is it possible for `this._pushers` to be `null` ?
       array_remove(this._pushers, info);
-      done();
     };
   }
 }

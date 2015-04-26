@@ -42,24 +42,25 @@
     (stream/fixed 5))
 
 (FUNCTION
-  (w/in-stream :: (FORALL A
-                    (-> (Task A)
-                        (Task Void))))
-  (w/in-stream task)
+  (w/stream :: (FORALL A
+                 (-> (Task A)
+                     (Task Void))))
+  (w/stream task)
     (on-cancel
       (ignore task)
       (wrap (void))))
 
 (FUNCTION
-  (w/out-stream :: (FORALL A B
-                     (-> (Stream A)
-                         (Task B)
-                         (Task Void))))
-  (w/out-stream out task)
+  (w/stream-close! :: (FORALL A B
+                        (-> (Stream A)
+                            (Task B)
+                            (Task Void))))
+  (w/stream-close! out task)
     # TODO if out gets closed, this may call stream/close! twice
     # TODO what if it errors ?
-    (finally (w/in-stream task)
-             (stream/close! out)))
+    (w/stream
+      (finally task
+               (stream/close! out))))
 
 # TODO find a better name for this
 # TODO maybe get rid of this ?
@@ -69,10 +70,9 @@
                             (-> (Stream A) (Task B))
                             (Task (Stream A)))))
   (stream/generate out f)
-    (DO (ignore
-          (thread
-            (w/out-stream out
-              (f out))))
+    (DO (ignore-thread
+          (w/stream-close! out
+            (f out)))
         (wrap out)))
 
 (FUNCTION
@@ -81,7 +81,7 @@
                          (-> A (Task Void))
                          (Task Void))))
   (stream/each! in f)
-    (w/in-stream
+    (w/stream
       (forever
         (DO value = (pull! in)
             (f value)))))
@@ -92,9 +92,8 @@
                   (Stream A)
                   (Task Void))))
   (pipe! from to)
-    (w/out-stream to
-      (stream/each! from -> value
-        (push! to value))))
+    (stream/each! from -> value
+      (push! to value)))
 
 (FUNCTION
   (stream/merge! :: (FORALL A
@@ -102,13 +101,9 @@
                          (Stream A)
                          (Task Void))))
   (stream/merge! @in out)
-    (w/out-stream out
-      (concurrent
-        @(map in -> in
-           # Can't use pipe because we want to close the output stream
-           # only when *all* of the input streams are closed
-           (stream/each! in -> value
-             (push! out value))))))
+    (ignore-concurrent
+      @(map in -> in
+         (pipe! in out))))
 
 (FUNCTION
   (stream/map! :: (FORALL A B
@@ -117,9 +112,8 @@
                         (-> A B)
                         (Task Void))))
   (stream/map! in out f)
-    (w/stream out
-      (stream/each! in -> value
-        (push! out (f value)))))
+    (stream/each! in -> value
+      (push! out (f value))))
 
 (FUNCTION
   (stream/foldl! :: (FORALL A B
@@ -152,11 +146,10 @@
                             (Stream B)
                             (Task Void))))
   (stream/flatten! in out)
-    (w/out-stream out
-      (stream/each! in -> value
-        (ignore-sequence
-          @(map value -> value
-             (push! value out))))))
+    (stream/each! in -> value
+      (ignore-sequence
+        @(map value -> value
+           (push! value out)))))
 ----
 
 .Examples

@@ -67,3 +67,11 @@ export const array_remove = (array, x) => {
     array["splice"](i, 1);
   }
 };
+
+
+export const nextTick = (f) => {
+  // Because we're using `event_queue`, we avoid the 4ms penalty of `setTimeout`.
+  // We could also use something like `setImmediate`, but that's not cross-platform.
+  // TODO use MutationObserver, setImmediate, nextTick, etc. if they're available
+  setTimeout(f, 0);
+};

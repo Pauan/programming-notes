@@ -1,8 +1,8 @@
 import { push, pull, close } from "../../FFI/Stream"; // "nulan:Stream"
 import { _bind, run, _finally } from "../../FFI/Task"; // "nulan:Task"
 
-const fs   = require("fs");
-const path = require("path");
+const _fs   = require("fs");
+const _path = require("path");
 
 
 export const callback = (task) => (err, value) => {
@@ -18,30 +18,25 @@ export const read_from_Node = (input, output) => (task) => {
   let finished = false;
 
   const cleanup = () => {
-    finished = true;
-    input["removeListener"]("end", onEnd);
-    input["removeListener"]("error", onError);
-    input["removeListener"]("readable", onReadable);
+    if (!finished) {
+      finished = true;
+      input["removeListener"]("end", onEnd);
+      input["removeListener"]("error", onError);
+      input["removeListener"]("readable", onReadable);
+    }
   };
 
-  task.onAbort = (done) => {
-    if (!finished) {
-      cleanup();
-    }
-    done();
+  task.onAbort = () => {
+    cleanup();
   };
 
   const onEnd = () => {
-    if (!finished) {
-      cleanup();
-      task.success(undefined);
-    }
+    cleanup();
+    task.success(undefined);
   };
 
   const onError = (e) => {
-    if (!finished) {
-      cleanup();
-    }
+    cleanup();
     task.error(e);
   };
 
@@ -55,11 +50,9 @@ export const read_from_Node = (input, output) => (task) => {
         // TODO is it possible for onEnd to be called after the Stream is closed, and thus double-close it ?
         const t = run(push(output, chunk), onReadable, onError, onEnd);
 
-        task.onAbort = (done) => {
-          if (!finished) {
-            cleanup();
-          }
-          t.abort(done);
+        task.onAbort = () => {
+          cleanup();
+          t.abort();
         };
       }
     }
@@ -78,49 +71,38 @@ export const write_to_Node = (input, output) => (task) => {
   let finished = false;
 
   const cleanup = () => {
-    finished = true;
-    // Because Node.js is stupid and doesn't have "autoClose" for
-    // `fs.createWriteStream`, we instead have to set this to prevent
-    // Node.js from closing the file descriptor
-    // TODO this fix might no longer work in future versions of Node.js
-    output["closed"] = true;
-    output["removeListener"]("finish", onFinish);
-    output["removeListener"]("error", onError);
-    output["removeListener"]("drain", onDrain);
+    if (!finished) {
+      finished = true;
+      output["removeListener"]("finish", onFinish);
+      output["removeListener"]("error", onError);
+      output["removeListener"]("drain", onDrain);
+      // TODO is this correct ?
+      output["end"]();
+    }
   };
 
-  task.onAbort = (done) => {
-    if (!finished) {
-      cleanup();
-    }
-    done();
+  task.onAbort = () => {
+    cleanup();
   };
 
   // TODO is this correct? maybe get rid of the "finish" event entirely ?
   const onFinish = () => {
-    if (!finished) {
-      cleanup();
-    }
+    cleanup();
     task.error(new Error("This should never happen"));
   };
 
   const onCancel = () => {
-    if (!finished) {
-      cleanup();
-      // TODO is this correct ?
-      output["end"]();
-      task.success(undefined);
-    }
+    cleanup();
+    task.success(undefined);
   };
 
   const onError = (e) => {
-    if (!finished) {
-      cleanup();
-    }
+    cleanup();
     task.error(e);
   };
 
   const onSuccess = (value) => {
+    // Don't write if the Stream is ended
     if (!finished) {
       if (output["write"](value, "utf8")) {
         onDrain();
@@ -132,11 +114,9 @@ export const write_to_Node = (input, output) => (task) => {
     if (!finished) {
       const t = run(pull(input), onSuccess, onError, onCancel);
 
-      task.onAbort = (done) => {
-        if (!finished) {
-          cleanup();
-        }
-        t.abort(done);
+      task.onAbort = () => {
+        cleanup();
+        t.abort();
       };
     }
   };
@@ -148,86 +128,62 @@ export const write_to_Node = (input, output) => (task) => {
   output["on"]("error", onError);
   output["on"]("drain", onDrain);
 
+  // Because Node.js is stupid and doesn't have "autoClose" for
+  // `fs.createWriteStream`, we instead have to set this to prevent
+  // Node.js from closing the file descriptor
+  // TODO this fix might no longer work in future versions of Node.js
+  output["closed"] = true;
+
   onDrain();
 };
 
 
 const fs_close = (fd) => (task) => {
-  fs["close"](fd, callback(task));
+  _fs["close"](fd, callback(task));
 };
 
 const fs_open = (path, flags) => (task) => {
-  let aborted = false;
-  let done = null;
-
-  fs["open"](path, flags, (err, fd) => {
-    if (aborted) {
-      if (err) {
-        task.error(err);
-        done();
-
-      } else {
-        fs["close"](fd, (err) => {
-          if (err) {
-            task.error(err);
-          }
-          done();
-        });
-      }
-
-    } else if (err) {
-      task.error(err);
-
-    } else {
-      task.success(fd);
-    }
-  });
-
-  task.onAbort = (f) => {
-    aborted = true;
-    done = f;
-  };
+  _fs["open"](path, flags, callback(task));
 };
 
 export const with_fs_open = (path, flags, f) =>
-  _bind(fs_open(path, flags), (fd) =>
-    _finally(f(fd), fs_close(fd)));
+  with_resource(fs_open(path, flags), f, fs_close);
 
 export const read_file = (path, output) =>
   with_fs_open(path, "r", (fd) =>
-   _finally(read_from_Node(fs["createReadStream"](null, { "encoding": "utf8", "fd": fd, "autoClose": false }), output),
+   _finally(read_from_Node(_fs["createReadStream"](null, { "encoding": "utf8", "fd": fd, "autoClose": false }), output),
             // TODO maybe this shouldn't close, but should instead let the caller close it ?
             close(output)));
 
 export const write_file = (input, path) =>
   with_fs_open(path, "w", (fd) =>
-    write_to_Node(input, fs["createWriteStream"](null, { "encoding": "utf8", "fd": fd })));
+    write_to_Node(input, _fs["createWriteStream"](null, { "encoding": "utf8", "fd": fd })));
 
 export const rename_file = (from, to) => (task) => {
-  fs["rename"](from, to, callback(task));
+  _fs["rename"](from, to, callback(task));
 };
 
 export const symlink = (from, to) => (task) => {
-  fs["symlink"](from, to, callback(task));
+  _fs["symlink"](from, to, callback(task));
 };
 
 // TODO is this necessary / useful ?
 export const real_path = (path) => (task) => {
-  fs["realpath"](path, callback(task));
+  _fs["realpath"](path, callback(task));
 };
 
 export const remove_file = (path) => (task) => {
-  fs["unlink"](path, callback(task));
+  _fs["unlink"](path, callback(task));
 };
 
 export const remove_directory = (path) => (task) => {
-  fs["rmdir"](path, callback(task));
+  _fs["rmdir"](path, callback(task));
 };
 
 // TODO this should probably return something indicating whether the directory
 //      already existed or not, or perhaps have another function for that ?
 export const make_directory = (path) => (task) => {
-  fs["mkdir"](path, function (err) {
+  _fs["mkdir"](path, function (err) {
     if (err) {
       if (err["code"] === "EEXIST") {
         task.success(undefined);
@@ -241,7 +197,7 @@ export const make_directory = (path) => (task) => {
 };
 
 export const files_from_directory = (path) => (task) => {
-  fs["readdir"](path, callback(task));
+  _fs["readdir"](path, callback(task));
 };
 
 // TODO is it faster or slower to use `fs.stat` to check for a directory,
@@ -257,10 +213,10 @@ export const files_from_directory_recursive = (file) => (task) => {
     pending += files["length"];
 
     files["forEach"](function (file) {
-      const new_parent = path["join"](parent, file);
-      const new_prefix = path["join"](prefix, file);
+      const new_parent = _path["join"](parent, file);
+      const new_prefix = _path["join"](prefix, file);
 
-      fs["readdir"](new_parent, function (err, files) {
+      _fs["readdir"](new_parent, function (err, files) {
         if (err) {
           if (err["code"] === "ENOTDIR") {
             if (!aborted) {
@@ -284,7 +240,7 @@ export const files_from_directory_recursive = (file) => (task) => {
     });
   }
 
-  fs["readdir"](file, function (err, files) {
+  _fs["readdir"](file, function (err, files) {
     if (err) {
       task.error(err);
 
@@ -293,8 +249,7 @@ export const files_from_directory_recursive = (file) => (task) => {
     }
   });
 
-  task.onAbort = (done) => {
+  task.onAbort = () => {
     aborted = true;
-    done();
   };
 };
