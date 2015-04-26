@@ -106,11 +106,14 @@ const increment = (i) =>
     _bind(thread(forever(push(s, 1))), (_) =>
       thread(forever(pull(s)))));*/
 
-//_bind(current_time, log)
+//const main = () => increment(0);
+
+const main = () =>
+  race([increment(0),
+        delay(10000)]);
 
 /*const main = () =>
-  race([increment(0),
-        delay(1000)]);*/
+  forever(_bind(current_time, log));*/
 
 /*const main = () =>
   forever(log_current_time(10));*/
@@ -137,8 +140,8 @@ setTimeout(() => {
     ignore_concurrent([read_file("/home/pauan/Scratch/2014-09-30", s),
                        stream_each(s, (x) => log(x))]));*/
 
-const main = () =>
-  copy_file("/home/pauan/Scratch/2014-09-30", "/home/pauan/Scratch/tmp/foo");
+/*const main = () =>
+  copy_file("/home/pauan/Scratch/2014-09-30", "/home/pauan/Scratch/tmp/foo");*/
 
 /*const main = () =>
   _bind(files_from_directory_recursive("/home/pauan/Scratch"), (a) =>
@@ -151,7 +154,7 @@ const main = () =>
 
       generate_multiply(x),
 
-      //accumulate(x),
+      accumulate(x),
 
       _bind(delay(1000), (_) =>
         debug("CLOSING", close(x)))

@@ -1,14 +1,21 @@
 import { Queue, array_remove, nextTick } from "./Util";
 
 
+const error_stack = (e) => {
+  if (e["stack"] != null) {
+    return e["stack"];
+  } else {
+    return e;
+  }
+};
+
 const print_fatal = (s) => {
   // TODO code duplication with print_error
-  console["error"]("="["repeat"](50) + "\n" + s + "\n" + "="["repeat"](50));
+  console["error"]("\n" + "="["repeat"](50) + "\n" + s + "\n" + "="["repeat"](50));
 };
 
 const print_finished_error = (e) => {
-  // TODO code duplication with print_error
-  print_fatal("AN ERROR OCCURRED AFTER THE TASK WAS FINISHED!\n\n" + e["stack"]);
+  print_fatal("AN ERROR OCCURRED AFTER THE TASK WAS FINISHED!\n\n" + error_stack(e));
 };
 
 
@@ -18,7 +25,7 @@ const print_finished_error = (e) => {
 // For Node.js only
 if (typeof process === "object" && typeof process["on"] === "function") {
   process["on"]("uncaughtException", (e) => {
-    print_fatal("AN UNCAUGHT ERROR OCCURRED!\n\n" + e["stack"]);
+    print_fatal("AN UNCAUGHT ERROR OCCURRED!\n\n" + error_stack(e));
     process["exit"](1);
   });
 
@@ -41,35 +48,58 @@ const task_queue = new Queue();
 // Arbitrary number, just so long as it's big enough for normal use cases
 const TASK_QUEUE_MAX_CAPACITY = 1024;
 
+let TASK_QUEUE_FLUSHING = false;
+
+// Macrotask queue scheduler, similar to setImmediate
 const task_queue_flush = () => {
-  while (task_queue.length !== 0) {
-    task_queue.pull()();
+  if (!TASK_QUEUE_FLUSHING) {
+    TASK_QUEUE_FLUSHING = true;
+
+    const loop = () => {
+      let pending = task_queue.length;
+
+      // Process all the tasks that were queued up, but if more tasks are queued, they are not processed
+      do {
+        // Pull the task out of the queue and then call it
+        task_queue.pull()();
+        --pending;
+      } while (pending !== 0);
+
+      // We're done processing all of the tasks
+      if (task_queue.length === 0) {
+        TASK_QUEUE_FLUSHING = false;
+
+      // Process any remaining tasks
+      } else {
+        // TODO this is necessary in order to abort infinite loops, but is there a better way ?
+        nextTick(loop);
+      }
+    };
+
+    // TODO this is necessary in order to abort infinite loops, but is there a better way ?
+    nextTick(loop);
   }
 };
 
 // TODO is this a good idea ? it's useful for stuff like Streams, but do we want *all* Tasks to behave this way ?
 // TODO use the asap polyfill ?
-const asap = (f) => {
+export const async = (f) => {
   //return f();
 
   //promise["then"](f);
 
-  // TODO this is necessary to stop infinite loops, but is there a better way ?
-  nextTick(f);
+  //nextTick(f);
 
-  /*if (task_queue.length === 0) {
-    task_queue.push(f);
-    nextTick(task_queue_flush);
-  } else {
-    task_queue.push(f);
-  }
+  task_queue.push(f);
 
   // Warn if the task queue gets too big
   if (task_queue.length > TASK_QUEUE_MAX_CAPACITY) {
     console["warn"]("Task queue has " + task_queue.length +
                     " items, which is greater than the max capacity of " +
                     TASK_QUEUE_MAX_CAPACITY);
-  }*/
+  }
+
+  nextTick(task_queue_flush);
 
   //return f();
   //process.nextTick(f);
@@ -113,7 +143,7 @@ class Task {
       this._onCancel = null;
       this.onAbort = null; // TODO what if somebody sets onAbort after the Task is succeeded ?
 
-      asap(() => {
+      async(() => {
         f(value);
         --RUNNING_TASKS; // TODO is this correct ?
       });
@@ -137,7 +167,7 @@ class Task {
       this._onCancel = null;
       this.onAbort = null; // TODO what if somebody sets onAbort after the Task is errored ?
 
-      asap(() => {
+      async(() => {
         f(e);
         --RUNNING_TASKS; // TODO is this correct ?
       });
@@ -158,7 +188,7 @@ class Task {
       this._onCancel = null;
       this.onAbort = null; // TODO what if somebody sets onAbort after the Task is cancelled ?
 
-      asap(() => {
+      async(() => {
         f();
         --RUNNING_TASKS; // TODO is this correct ?
       });
@@ -182,6 +212,7 @@ class Task {
       // Some tasks can't be aborted
       if (f !== null) {
         // We cannot use asap for this, or it will potentially cause problems (e.g. _bind and _finally)
+        // TODO we really want to be able to use asap for this, though, because otherwise we blow out the call stack
         f();
       }
 
@@ -321,7 +352,7 @@ export const Promise_from_Task = (t) =>
   });
 
 export const print_error = (e) => {
-  console["error"](e["stack"]);
+  console["error"](error_stack(e));
 };
 
 export const run = (task, onSuccess, onError, onCancel) => {

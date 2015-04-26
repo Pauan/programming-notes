@@ -69,9 +69,9 @@ export const array_remove = (array, x) => {
 };
 
 
-export const nextTick = (f) => {
-  // Because we're using `event_queue`, we avoid the 4ms penalty of `setTimeout`.
-  // We could also use something like `setImmediate`, but that's not cross-platform.
-  // TODO use MutationObserver, setImmediate, nextTick, etc. if they're available
-  setTimeout(f, 0);
-};
+// TODO use setImmediate shim
+export const nextTick =
+  // setImmediate is ~52.86 times faster than setTimeout
+  (typeof setImmediate === "function"
+    ? setImmediate                   // ~3,700
+    : (f) => { setTimeout(f, 0) });  // ~70
