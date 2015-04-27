@@ -1,31 +1,13 @@
-import { Queue, array_remove, nextTick } from "./Util";
+import { Queue, array_remove, async, error_stack, fatal_error, print_error } from "./Util";
 
 
-const error_stack = (e) => {
-  if (e["stack"] != null) {
-    return e["stack"];
-  } else {
-    return e;
-  }
-};
-
-const print_fatal = (s) => {
-  // TODO code duplication with print_error
-  console["error"]("\n" + "="["repeat"](50) + "\n" + s + "\n" + "="["repeat"](50));
-};
-
-const print_finished_error = (e) => {
-  print_fatal("AN ERROR OCCURRED AFTER THE TASK WAS FINISHED!\n\n" + error_stack(e));
-};
-
-
-//const promise = Promise.resolve();
+let RUNNING_TASKS = 0;
 
 
 // For Node.js only
 if (typeof process === "object" && typeof process["on"] === "function") {
   process["on"]("uncaughtException", (e) => {
-    print_fatal("AN UNCAUGHT ERROR OCCURRED!\n\n" + error_stack(e));
+    fatal_error("AN UNCAUGHT ERROR OCCURRED!\n\n" + error_stack(e));
     process["exit"](1);
   });
 
@@ -37,199 +19,110 @@ if (typeof process === "object" && typeof process["on"] === "function") {
   process["on"]("exit", () => {
     // This should never happen, it's just a sanity check, just in case
     if (RUNNING_TASKS !== 0) {
-      print_fatal("NODE.JS IS EXITING, BUT THERE ARE STILL " + RUNNING_TASKS + " TASKS PENDING!");
+      fatal_error("NODE.JS IS EXITING, BUT THERE ARE STILL " + RUNNING_TASKS + " TASKS PENDING!");
     }
   });
 }
 
 
-const task_queue = new Queue();
+// TODO it shouldn't allow for calling cleanup_success twice
+const cleanup_success = (value) => {};
 
-// Arbitrary number, just so long as it's big enough for normal use cases
-const TASK_QUEUE_MAX_CAPACITY = 1024;
+const cleanup_success_error = (value) => {
+  // TODO pretty printing for value
+  fatal_error("INVALID SUCCESS!\n\n" + value);
+};
 
-let TASK_QUEUE_FLUSHING = false;
+const cleanup_error = (e) => {
+  fatal_error("INVALID ERROR!\n\n" + error_stack(e));
+};
 
-// Macrotask queue scheduler, similar to setImmediate
-const task_queue_flush = () => {
-  if (!TASK_QUEUE_FLUSHING) {
-    TASK_QUEUE_FLUSHING = true;
+const cleanup_cancel = () => {
+  fatal_error("INVALID CANCEL!");
+};
 
-    const loop = () => {
-      let pending = task_queue.length;
+const cleanup_terminate = () => {
+  return false;
+};
 
-      // Process all the tasks that were queued up, but if more tasks are queued, they are not processed
-      do {
-        // Pull the task out of the queue and then call it
-        task_queue.pull()();
-        --pending;
-      } while (pending !== 0);
+const cleanup_terminate_error = () => {
+  fatal_error("CANNOT TERMINATE THE SAME ACTION TWICE!");
+  return false;
+};
 
-      // We're done processing all of the tasks
-      if (task_queue.length === 0) {
-        TASK_QUEUE_FLUSHING = false;
+const cleanup = (action, success, terminate) => {
+  action.success = success;
+  action.error = cleanup_error;
+  action.cancel = cleanup_cancel;
+  action.terminate = terminate;
+  action.onTerminate = null;
+};
 
-      // Process any remaining tasks
-      } else {
-        // TODO this is necessary in order to abort infinite loops, but is there a better way ?
-        nextTick(loop);
+export const run = (task, onSuccess, onError, onCancel) => {
+  ++RUNNING_TASKS;
+
+  const action = {
+    onTerminate: null,
+
+    success: (value) => {
+      // It's okay to call terminate after success
+      cleanup(action, cleanup_success_error, cleanup_terminate);
+
+      async(() => {
+        onSuccess(value);
+        --RUNNING_TASKS;
+      });
+    },
+
+    error: (e) => {
+      // It's okay to call terminate after error
+      cleanup(action, cleanup_success_error, cleanup_terminate);
+
+      async(() => {
+        onError(e);
+        --RUNNING_TASKS;
+      });
+    },
+
+    cancel: () => {
+      // It's okay to call terminate after cancel
+      cleanup(action, cleanup_success_error, cleanup_terminate);
+
+      async(() => {
+        onCancel();
+        --RUNNING_TASKS;
+      });
+    },
+
+    terminate: () => {
+      const f = action.onTerminate;
+
+      // It's okay to call success after terminate
+      cleanup(action, cleanup_success, cleanup_terminate_error);
+
+      // Not every action supports termination
+      if (f !== null) {
+        // We can't use `async` (see e.g. _finally, _bind, etc.)
+        f();
       }
-    };
 
-    // TODO this is necessary in order to abort infinite loops, but is there a better way ?
-    nextTick(loop);
-  }
+      --RUNNING_TASKS;
+      return true;
+    }
+  };
+
+  task(action);
+
+  return action;
 };
 
-// TODO is this a good idea ? it's useful for stuff like Streams, but do we want *all* Tasks to behave this way ?
-// TODO use the asap polyfill ?
-export const async = (f) => {
-  //return f();
-
-  //promise["then"](f);
-
-  //nextTick(f);
-
-  task_queue.push(f);
-
-  // Warn if the task queue gets too big
-  if (task_queue.length > TASK_QUEUE_MAX_CAPACITY) {
-    console["warn"]("Task queue has " + task_queue.length +
-                    " items, which is greater than the max capacity of " +
-                    TASK_QUEUE_MAX_CAPACITY);
-  }
-
-  task_queue_flush();
-
-  //return f();
-  //process.nextTick(f);
-  //setImmediate(f);
-  //setTimeout(f, 0);
-};
-
-
-let RUNNING_TASKS = 0;
 
 // TODO is using `| 0` a good idea? is there a better way to get Chrome to treat them as a small uint ?
-const PENDING   = 0 | 0;
-const SUCCEEDED = 1 | 0;
-const ERRORED   = 2 | 0;
-const CANCELLED = 3 | 0;
-const ABORTED   = 4 | 0;
-
-class Task {
-  constructor(onSuccess, onError, onCancel) {
-    // TODO is a simple boolean `_pending` sufficient ?
-    // TODO is it faster or slower to use (`_pending` and `if`) or (`_state` and `switch`) ?
-    this._state = PENDING;
-
-    // When a task's state is no longer pending, exactly 1 of these 4
-    // callbacks will be called, and it will only be called once.
-    this._onSuccess = onSuccess;
-    this._onError = onError;
-    this._onCancel = onCancel;
-    this.onAbort = null;
-
-    ++RUNNING_TASKS;
-  }
-
-  success(value) {
-    if (this._state === PENDING) {
-      const f = this._onSuccess;
-
-      this._state = SUCCEEDED;
-      this._onSuccess = null;
-      this._onError = null;
-      this._onCancel = null;
-      this.onAbort = null; // TODO what if somebody sets onAbort after the Task is succeeded ?
-
-      async(() => {
-        f(value);
-        --RUNNING_TASKS; // TODO is this correct ?
-      });
-
-    // It's okay for a Task to succeed after an abort
-    // TODO we should only allow `success` to be called once, even after an abort
-    } else if (this._state !== ABORTED) {
-      // TODO if the task is aborted, should it *not* print an error message ?
-      // TODO pretty printing for value
-      print_fatal("A SUCCESS OCCURRED AFTER THE TASK WAS FINISHED!\n\n" + value);
-    }
-  }
-
-  error(e) {
-    if (this._state === PENDING) {
-      const f = this._onError;
-
-      this._state = ERRORED;
-      this._onSuccess = null;
-      this._onError = null;
-      this._onCancel = null;
-      this.onAbort = null; // TODO what if somebody sets onAbort after the Task is errored ?
-
-      async(() => {
-        f(e);
-        --RUNNING_TASKS; // TODO is this correct ?
-      });
-
-    } else {
-      // This is to make sure that errors are *never* silently ignored
-      print_finished_error(e);
-    }
-  }
-
-  cancel() {
-    if (this._state === PENDING) {
-      const f = this._onCancel;
-
-      this._state = CANCELLED;
-      this._onSuccess = null;
-      this._onError = null;
-      this._onCancel = null;
-      this.onAbort = null; // TODO what if somebody sets onAbort after the Task is cancelled ?
-
-      async(() => {
-        f();
-        --RUNNING_TASKS; // TODO is this correct ?
-      });
-
-    // TODO should it be okay for a task to cancel after an abort ?
-    } else {
-      print_fatal("A CANCEL OCCURRED AFTER THE TASK WAS FINISHED!");
-    }
-  }
-
-  abort() {
-    if (this._state === PENDING) {
-      const f = this.onAbort;
-
-      this._state = ABORTED;
-      this._onSuccess = null;
-      this._onError = null;
-      this._onCancel = null;
-      this.onAbort = null; // TODO what if somebody sets onAbort after the Task is aborted ?
-
-      // Some tasks can't be aborted
-      if (f !== null) {
-        // We cannot use asap for this, or it will potentially cause problems (e.g. _bind and _finally)
-        // TODO we really want to be able to use asap for this, though, because otherwise we blow out the call stack
-        f();
-      }
-
-      --RUNNING_TASKS; // TODO is this correct ?
-      return true;
-
-    } else if (this._state === ABORTED) {
-      // TODO maybe use this.error instead ?
-      print_fatal("YOU CANNOT ABORT THE SAME TASK TWICE!");
-      return false;
-
-    } else {
-      return false;
-    }
-  }
-}
-
+const PENDING    = 0 | 0;
+const SUCCEEDED  = 1 | 0;
+const ERRORED    = 2 | 0;
+const CANCELLED  = 3 | 0;
+const TERMINATED = 4 | 0;
 
 class Thread {
   constructor(task) {
@@ -237,14 +130,15 @@ class Thread {
     this._value = null;
     this._listeners = [];
 
-    this._task = run(task, (value) => {
+    // This is to make sure that Node.js doesn't exit until all the Tasks are done
+    this._action = run(_finally(task, block()), (value) => {
       if (this._state === PENDING) {
         const a = this._listeners;
 
         this._state = SUCCEEDED;
         this._value = value;
         this._listeners = null;
-        this._task = null;
+        this._action = null;
 
         // TODO this can be made a bit faster
         a["forEach"]((x) => { x.success(value) });
@@ -269,64 +163,64 @@ class Thread {
     // TODO verify that _value is null ?
     this._state = new_state;
     this._listeners = null;
-    this._task = null;
+    this._action = null;
 
     // TODO this can be made a bit faster
     a["forEach"]((x) => { x.cancel() });
   }
 
-  wait(task) {
+  wait(action) {
     switch (this._state) {
     case PENDING:
-      this._listeners["push"](task);
+      this._listeners["push"](action);
 
       // TODO test this
-      task.onAbort = () => {
-        remove_array(this._listeners, task);
+      action.onTerminate = () => {
+        remove_array(this._listeners, action);
       };
       break;
 
-    case SUCCESS:
-      task.success(this._value);
+    case SUCCEEDED:
+      action.success(this._value);
       break;
 
     // TODO is this correct ?
-    case CANCELLED:
     case ERRORED:
-    case ABORTED:
-      task.cancel();
+    case CANCELLED:
+    case TERMINATED:
+      action.cancel();
       break;
     }
   }
 
-  kill(task) {
+  kill(action) {
     switch (this._state) {
     case PENDING:
-      const t = this._task;
+      const t = this._action;
       const a = this._listeners;
 
       // TODO verify that _value is null ?
-      this._state = ABORTED;
+      this._state = TERMINATED;
       this._listeners = null;
-      this._task = null;
+      this._action = null;
 
       // TODO this can be made a bit faster
       a["forEach"]((x) => { x.cancel() });
 
       // TODO should this be before or after cancelling the listeners ?
-      t.abort();
-      task.success(undefined);
+      t.terminate();
+      action.success(undefined);
       break;
 
     // TODO is this correct ?
-    case SUCCESS:
+    case SUCCEEDED:
     case ERRORED:
     case CANCELLED:
-      task.success(undefined);
+      action.success(undefined);
       break;
 
-    case ABORTED:
-      task.error(new Error("Cannot kill thread: thread is already killed"));
+    case TERMINATED:
+      action.error(new Error("Cannot kill thread: thread is already killed"));
       break;
     }
   }
@@ -335,37 +229,23 @@ class Thread {
 
 export const noop = () => {};
 
-// There's no standard way to cancel/abort a Promise
-export const Task_from_Promise = (f) => (task) => {
-  f()["then"]((x) => {
-    task.success(x);
-  }, (e) => {
-    task.error(e);
-  });
+// There's no standard way to cancel/terminate a Promise
+export const Task_from_Promise = (f) => (action) => {
+  f()["then"](action.success, action.error);
 };
 
-// TODO how to handle the task/promise being aborted ?
-export const Promise_from_Task = (t) =>
+// TODO how to handle the task/promise being terminated ?
+export const Promise_from_Task = (task) =>
   new Promise((resolve, reject) => {
     // TODO is cancellation correctly handled ?
-    run(t, resolve, reject, reject);
+    run(task, resolve, reject, reject);
   });
-
-export const print_error = (e) => {
-  console["error"](error_stack(e));
-};
-
-export const run = (task, onSuccess, onError, onCancel) => {
-  const t = new Task(onSuccess, onError, onCancel);
-  // TODO maybe use try/catch here ?
-  task(t);
-  return t;
-};
 
 // TODO does this work properly in all platforms ?
 const MAX_TIMER = Math.pow(2, 31) - 1;
 
 // TODO test this
+// TODO it creates a new timer for each Thread, it would be better to use a single timer
 export const block = () => {
   // This is necessary to prevent Node.js from exiting before the tasks are complete
   // TODO is there a more efficient way to do this ?
@@ -374,15 +254,14 @@ export const block = () => {
   // TODO test this
   const timer = setInterval(noop, MAX_TIMER);
 
-  return (task) => {
+  return (action) => {
     clearInterval(timer);
-    task.success(undefined);
+    action.success(undefined);
   };
 };
 
 export const run_root = (f) => {
-  // TODO maybe use `execute`, rather than `try/catch` ?
-  // TODO is it necessary to use try/catch ?
+  // TODO I'd like to use `execute`, but I can't, because `f` returns a `Task`, so I'd have to double-run it
   try {
     // TODO is it inefficient to use _finally here ?
     run(_finally(f(), block()), noop, print_error, noop);
@@ -393,235 +272,231 @@ export const run_root = (f) => {
 
 // This can be implemented entirely with `execute`,
 // but it's faster to implement it like this
-export const success = (x) => (task) => {
-  task.success(x);
+export const success = (x) => (action) => {
+  action.success(x);
 };
 
 export const error = (s) => {
   // TODO better stack traces
   const e = new Error(s);
-  return (task) => {
-    task.error(e);
+  return (action) => {
+    action.error(e);
   };
 };
 
-export const cancel = () => (task) => {
-  task.cancel();
+export const cancel = () => (action) => {
+  action.cancel();
 };
 
-// TODO what if the task is aborted ?
-export const never = () => (task) => {};
+// TODO what if the action is terminated ?
+export const never = () => (action) => {};
 
-export const _bind = (x, f) => (task) => {
-  let aborted = false;
+export const _bind = (task, f) => (action) => {
+  // TODO is this necessary ?
+  let terminated = false;
 
-  const success = (value) => {
-    task.success(value);
-  };
+  const onSuccess = (value) => {
+    if (!terminated) {
+      action.onTerminate = null;
 
-  const error = (e) => {
-    task.error(e);
-  };
+      // Runs the task in a tail-recursive manner, so that it consumes a
+      // constant amount of memory, even if it's an infinite loop
+      f(value)(action);
 
-  const cancel = () => {
-    task.cancel();
-  };
+      /*const a2 = run(f(value), action.success, action.error, action.cancel);
 
-  const t1 = run(x, (value) => {
-    if (!aborted) {
-      const t2 = run(f(value), success, error, cancel);
-
-      task.onAbort = () => {
-        t2.abort();
-      };
+      // TODO is it even possible for this to occur ?
+      action.onTerminate = () => {
+        a2.terminate();
+      };*/
     }
-  }, error, cancel);
-
-  task.onAbort = () => {
-    aborted = true;
-    t1.abort();
   };
+
+  // TODO slightly inefficient
+  // TODO is this needed to prevent a memory leak of `a1` ?
+  (function () {
+    const a1 = run(task, onSuccess, action.error, action.cancel);
+
+    action.onTerminate = () => {
+      terminated = true;
+      a1.terminate();
+    };
+  })();
 };
 
 // TODO test this
-export const with_resource = (before, during, after) => (task) => {
-  let aborted = false;
+export const with_resource = (before, during, after) => (action) => {
+  let terminated = false;
 
-  const success = (value) => {
-    task.success(value);
-  };
-
-  const error = (e) => {
-    task.error(e);
-  };
-
-  const cancel = () => {
-    task.cancel();
-  };
-
-  // This is always run, even if it's aborted
+  // This is always run, even if it's terminated
   run(before, (value) => {
-    if (aborted) {
-      // This is always run, even if it's aborted
-      run(after(value), success, error, cancel);
+    action.onTerminate = null;
+
+    if (terminated) {
+      // This is always run, even if it's terminated
+      // TODO maybe this should use `after(value)(action)` instead ?
+      run(after(value), noop, action.error, action.cancel);
 
     } else {
-      // There's no need to create a new task for this, so we just use the existing one
-      _finally(during(value), after(value))(task);
+      // There's no need to create a new action for this, so we just use the existing one
+      _finally(during(value), after(value))(action);
     }
-  }, error, cancel);
+  }, action.error, action.cancel);
 
-  task.onAbort = () => {
-    aborted = true;
+  action.onTerminate = () => {
+    terminated = true;
   };
 };
 
-export const _finally = (before, after) => (task) => {
-  const error = (e) => {
-    task.error(e);
-  };
+export const _finally = (before, after) => (action) => {
+  const onSuccess = (value) => {
+    // TODO is this necessary to prevent a memory leak ?
+    action.onTerminate = null;
 
-  const cancel = () => {
-    task.cancel();
-  };
-
-  const t = run(before, (value) => {
-    // This task is run no matter what, even if it is aborted
+    // This task is run no matter what, even if it is terminated
     run(after, (_) => {
-      task.success(value);
-    }, error, cancel);
+      action.success(value);
+    }, action.error, action.cancel);
+  };
 
-  }, (e) => {
+  const onError = (e) => {
+    // TODO is this necessary to prevent a memory leak ?
+    action.onTerminate = null;
+
     // Errors have precedence over cancellations
     const propagate = () => {
-      task.error(e);
+      action.error(e);
     };
 
-    // This task is run no matter what, even if it is aborted
-    run(after, propagate, error, propagate);
-
-  }, () => {
-    // This task is run no matter what, even if it is aborted
-    run(after, cancel, error, cancel);
-  });
-
-  task.onAbort = () => {
-    // Successfully aborted `t`
-    if (t.abort()) {
-      // This task is run no matter what, even if it is aborted
-      // There's nothing to return, so we just use `noop`
-      run(after, noop, error, cancel);
-    }
+    // This task is run no matter what, even if it is terminated
+    run(after, propagate, action.error, propagate);
   };
+
+  const onCancel = () => {
+    // TODO is this necessary to prevent a memory leak ?
+    action.onTerminate = null;
+
+    // This task is run no matter what, even if it is terminated
+    run(after, action.cancel, action.error, action.cancel);
+  };
+
+  // TODO slightly inefficient
+  // TODO is this needed to prevent a memory leak of `t` ?
+  (function () {
+    const t = run(before, onSuccess, onError, onCancel);
+
+    action.onTerminate = () => {
+      if (t.terminate()) {
+        // This task is run no matter what, even if it is terminated
+        // There's nothing to return, so we use `noop`
+        // TODO can this be implemented as `after(action)` ?
+        run(after, noop, action.error, action.cancel);
+      }
+    };
+  })();
 };
 
-export const on_cancel = (x, y) => (task) => {
-  let aborted = false;
+export const on_cancel = (x, y) => (action) => {
+  let terminated = false;
 
-  const success = (value) => {
-    task.success(value);
-  };
+  const onCancel = () => {
+    // TODO maybe this should execute even if it was terminated ?
+    if (!terminated) {
+      action.onTerminate = null;
 
-  const error = (e) => {
-    task.error(e);
-  };
+      // TODO is this correct ?
+      y(action);
 
-  const t1 = run(x, success, error, () => {
-    // TODO maybe this should execute even if it was aborted ?
-    if (!aborted) {
-      const t2 = run(y, success, error, () => {
-        task.cancel();
-      });
+      /*const t2 = run(y, action.success, action.error, action.cancel);
 
-      // TODO should this abort ?
-      task.onAbort = () => {
-        t2.abort();
-      };
+      // TODO should this terminate ?
+      action.onTerminate = () => {
+        t2.terminate();
+      };*/
     }
-  });
-
-  task.onAbort = () => {
-    aborted = true;
-    t1.abort();
   };
+
+  // TODO slightly inefficient
+  // TODO is this needed to prevent a memory leak of `t1` ?
+  (function () {
+    const t1 = run(x, action.success, action.error, onCancel);
+
+    action.onTerminate = () => {
+      terminated = true;
+      t1.terminate();
+    };
+  })();
 };
 
-export const execute = (f) => (task) => {
+export const execute = (f) => (action) => {
   try {
-    task.success(f());
+    action.success(f());
   } catch (e) {
-    task.error(e);
+    action.error(e);
   }
 };
 
 // This can be implemented entirely with bind + wrap,
 // but it's more efficient to implement it with the FFI
-export const ignore = (x) => (task) => {
-  const t = run(x, (_) => {
-    task.success(undefined);
+export const ignore = (task) => (action) => {
+  const t = run(task, (_) => {
+    action.success(undefined);
+  }, action.error, action.cancel);
 
-  }, (e) => {
-    task.error(e);
-
-  }, () => {
-    task.cancel();
-  });
-
-  task.onAbort = () => {
-    t.abort();
+  action.onTerminate = () => {
+    t.terminate();
   };
 };
 
-export const thread = (x) => (task) => {
-  task.success(new Thread(x));
+export const thread = (task) => (action) => {
+  action.success(new Thread(task));
 };
 
-export const thread_wait = (x) => (task) => {
-  x.wait(task);
+export const thread_wait = (thread) => (action) => {
+  thread.wait(action);
 };
 
-export const thread_kill = (x) => (task) => {
-  x.kill(task);
+export const thread_kill = (thread) => (action) => {
+  thread.kill(action);
 };
 
-export const abortAll = (tasks) => {
+export const terminateAll = (actions) => {
   // TODO is it faster to use a var or a let ?
-  for (let i = 0; i < tasks["length"]; ++i) {
-    tasks[i].abort();
+  for (let i = 0; i < actions["length"]; ++i) {
+    actions[i].terminate();
   }
 };
 
 // TODO verify that this works correctly in all situations
 // This can be implemented entirely in Nulan, but it's much more efficient to implement it in here
-export const sequential = (a) => (task) => {
+export const sequential = (a) => (action) => {
   const out = new Array(a["length"]);
 
-  let aborted = false;
-
-  const onError = (e) => {
-    task.error(e);
-  };
-
-  const onCancel = () => {
-    task.cancel();
-  };
+  let terminated = false;
 
   const loop = (i) => {
     if (i < a["length"]) {
-      const t = run(a[i], (value) => {
-        if (!aborted) {
+      const onSuccess = (value) => {
+        if (!terminated) {
+          action.onTerminate = null;
           out[i] = value;
           loop(i + 1);
         }
-      }, onError, onCancel);
-
-      task.onAbort = () => {
-        aborted = true;
-        t.abort();
       };
 
+      // TODO slightly inefficient
+      // TODO is this needed to prevent a memory leak of `t` ?
+      (function () {
+        const t = run(a[i], onSuccess, action.error, action.cancel);
+
+        action.onTerminate = () => {
+          terminated = true;
+          t.terminate();
+        };
+      })();
+
     } else {
-      task.success(out);
+      action.success(out);
     }
   };
 
@@ -629,19 +504,19 @@ export const sequential = (a) => (task) => {
 };
 
 // TODO verify that this works correctly in all situations
-export const concurrent = (a) => (task) => {
+export const concurrent = (a) => (action) => {
   const out = new Array(a["length"]);
 
-  const tasks = [];
+  const actions = [];
 
   let pending = a["length"];
 
   let failed = false;
 
-  const onAbort = () => {
+  const onTerminate = () => {
     if (!failed) {
       failed = true;
-      abortAll(tasks);
+      terminateAll(actions);
     }
   };
 
@@ -649,89 +524,90 @@ export const concurrent = (a) => (task) => {
     if (!failed) {
       --pending;
       if (pending === 0) {
-        task.success(out);
+        action.success(out);
       }
     }
   };
 
   const onError = (e) => {
-    onAbort();
+    onTerminate();
     // Always emit all the errors
     // The error that is emitted first is non-deterministic
-    task.error(e);
+    action.error(e);
   };
 
   const onCancel = () => {
-    onAbort();
-    task.cancel();
+    onTerminate();
+    action.cancel();
   };
 
   for (let i = 0; i < a["length"]; ++i) {
     // TODO test that this is always called asynchronously
+    // TODO does this leak `t` after `a[i]` succeeds ?
     const t = run(a[i], (value) => {
       out[i] = value;
       onSuccess();
     }, onError, onCancel);
 
-    tasks["push"](t);
+    actions["push"](t);
   }
 
-  task.onAbort = onAbort;
+  action.onTerminate = onTerminate;
 };
 
 // TODO verify that this works correctly in all situations
-export const fastest = (a) => (task) => {
-  const tasks = [];
+export const fastest = (a) => (action) => {
+  const actions = [];
 
   let done = false;
 
-  const onAbort = () => {
+  const onTerminate = () => {
     if (!done) {
       done = true;
-      abortAll(tasks);
+      terminateAll(actions);
     }
   };
 
   const onSuccess = (value) => {
-    onAbort();
-    task.success(value);
+    onTerminate();
+    action.success(value);
   };
 
   const onError = (e) => {
-    onAbort();
+    onTerminate();
     // Always emit all the errors
     // The error that is emitted first is non-deterministic
-    task.error(e);
+    action.error(e);
   };
 
   // TODO should it only cancel if all the tasks fail ?
   const onCancel = () => {
-    onAbort();
-    task.cancel();
+    onTerminate();
+    action.cancel();
   };
 
   // TODO is it faster to use var or let ?
   for (let i = 0; i < a["length"]; ++i) {
     // TODO test that this is always called asynchronously
-    tasks["push"](run(a[i], onSuccess, onError, onCancel));
+    actions["push"](run(a[i], onSuccess, onError, onCancel));
   }
 
-  task.onAbort = onAbort;
+  action.onTerminate = onTerminate;
 };
 
 
 // Often-used functionality
-export const delay = (ms) => (task) => {
+export const delay = (ms) => (action) => {
   const timer = setTimeout(() => {
-    task.success(undefined);
+    action.success(undefined);
   }, ms);
 
-  task.onAbort = () => {
+  action.onTerminate = () => {
     clearTimeout(timer);
   };
 };
 
-export const log = (s) => (task) => {
+export const log = (s) => (action) => {
   console["log"](s);
-  task.success(undefined);
+  action.success(undefined);
 };

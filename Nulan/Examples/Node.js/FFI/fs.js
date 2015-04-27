@@ -5,16 +5,16 @@ const _fs   = require("fs");
 const _path = require("path");
 
 
-export const callback = (task) => (err, value) => {
+export const callback = (action) => (err, value) => {
   if (err) {
-    task.error(err);
+    action.error(err);
   } else {
-    task.success(value);
+    action.success(value);
   }
 };
 
 
-export const read_from_Node = (input, output) => (task) => {
+export const read_from_Node = (input, output) => (action) => {
   let finished = false;
 
   const cleanup = () => {
@@ -26,18 +26,18 @@ export const read_from_Node = (input, output) => (task) => {
     }
   };
 
-  task.onAbort = () => {
+  action.onTerminate = () => {
     cleanup();
   };
 
   const onEnd = () => {
     cleanup();
-    task.success(undefined);
+    action.success(undefined);
   };
 
   const onError = (e) => {
     cleanup();
-    task.error(e);
+    action.error(e);
   };
 
   const onReadable = () => {
@@ -50,9 +50,9 @@ export const read_from_Node = (input, output) => (task) => {
         // TODO is it possible for onEnd to be called after the Stream is closed, and thus double-close it ?
         const t = run(push(output, chunk), onReadable, onError, onEnd);
 
-        task.onAbort = () => {
+        action.onTerminate = () => {
           cleanup();
-          t.abort();
+          t.terminate();
         };
       }
     }
@@ -67,7 +67,7 @@ export const read_from_Node = (input, output) => (task) => {
   onReadable();
 };
 
-export const write_to_Node = (input, output) => (task) => {
+export const write_to_Node = (input, output) => (action) => {
   let finished = false;
 
   const cleanup = () => {
@@ -81,24 +81,24 @@ export const write_to_Node = (input, output) => (task) => {
     }
   };
 
-  task.onAbort = () => {
+  action.onTerminate = () => {
     cleanup();
   };
 
   // TODO is this correct? maybe get rid of the "finish" event entirely ?
   const onFinish = () => {
     cleanup();
-    task.error(new Error("This should never happen"));
+    action.error(new Error("This should never happen"));
   };
 
   const onCancel = () => {
     cleanup();
-    task.success(undefined);
+    action.success(undefined);
   };
 
   const onError = (e) => {
     cleanup();
-    task.error(e);
+    action.error(e);
   };
 
   const onSuccess = (value) => {
@@ -114,9 +114,9 @@ export const write_to_Node = (input, output) => (task) => {
     if (!finished) {
       const t = run(pull(input), onSuccess, onError, onCancel);
 
-      task.onAbort = () => {
+      action.onTerminate = () => {
         cleanup();
-        t.abort();
+        t.terminate();
       };
     }
   };
@@ -138,12 +138,12 @@ export const write_to_Node = (input, output) => (task) => {
 };
 
 
-const fs_close = (fd) => (task) => {
-  _fs["close"](fd, callback(task));
+const fs_close = (fd) => (action) => {
+  _fs["close"](fd, callback(action));
 };
 
-const fs_open = (path, flags) => (task) => {
-  _fs["open"](path, flags, callback(task));
+const fs_open = (path, flags) => (action) => {
+  _fs["open"](path, flags, callback(action));
 };
 
 export const with_fs_open = (path, flags, f) =>
@@ -159,55 +159,55 @@ export const write_file = (input, path) =>
   with_fs_open(path, "w", (fd) =>
     write_to_Node(input, _fs["createWriteStream"](null, { "encoding": "utf8", "fd": fd })));
 
-export const rename_file = (from, to) => (task) => {
-  _fs["rename"](from, to, callback(task));
+export const rename_file = (from, to) => (action) => {
+  _fs["rename"](from, to, callback(action));
 };
 
-export const symlink = (from, to) => (task) => {
-  _fs["symlink"](from, to, callback(task));
+export const symlink = (from, to) => (action) => {
+  _fs["symlink"](from, to, callback(action));
 };
 
 // TODO is this necessary / useful ?
-export const real_path = (path) => (task) => {
-  _fs["realpath"](path, callback(task));
+export const real_path = (path) => (action) => {
+  _fs["realpath"](path, callback(action));
 };
 
-export const remove_file = (path) => (task) => {
-  _fs["unlink"](path, callback(task));
+export const remove_file = (path) => (action) => {
+  _fs["unlink"](path, callback(action));
 };
 
-export const remove_directory = (path) => (task) => {
-  _fs["rmdir"](path, callback(task));
+export const remove_directory = (path) => (action) => {
+  _fs["rmdir"](path, callback(action));
 };
 
 // TODO this should probably return something indicating whether the directory
 //      already existed or not, or perhaps have another function for that ?
-export const make_directory = (path) => (task) => {
+export const make_directory = (path) => (action) => {
   _fs["mkdir"](path, function (err) {
     if (err) {
       if (err["code"] === "EEXIST") {
-        task.success(undefined);
+        action.success(undefined);
       } else {
-        task.error(err);
+        action.error(err);
       }
     } else {
-      task.success(undefined);
+      action.success(undefined);
     }
   });
 };
 
-export const files_from_directory = (path) => (task) => {
-  _fs["readdir"](path, callback(task));
+export const files_from_directory = (path) => (action) => {
+  _fs["readdir"](path, callback(action));
 };
 
 // TODO is it faster or slower to use `fs.stat` to check for a directory,
 //      rather than relying upon the error message ?
-export const files_from_directory_recursive = (file) => (task) => {
+export const files_from_directory_recursive = (file) => (action) => {
   const out = [];
 
   let pending = 0;
 
-  let aborted = false;
+  let terminated = false;
 
   function loop(files, parent, prefix) {
     pending += files["length"];
@@ -219,20 +219,20 @@ export const files_from_directory_recursive = (file) => (task) => {
       _fs["readdir"](new_parent, function (err, files) {
         if (err) {
           if (err["code"] === "ENOTDIR") {
-            if (!aborted) {
+            if (!terminated) {
               out["push"](new_prefix);
 
               --pending;
               if (pending === 0) {
-                task.success(out);
+                action.success(out);
               }
             }
 
           } else {
-            task.error(err);
+            action.error(err);
           }
 
-        } else if (!aborted) {
+        } else if (!terminated) {
           --pending;
           loop(files, new_parent, new_prefix);
         }
@@ -242,14 +242,14 @@ export const files_from_directory_recursive = (file) => (task) => {
 
   _fs["readdir"](file, function (err, files) {
     if (err) {
-      task.error(err);
+      action.error(err);
 
-    } else if (!aborted) {
+    } else if (!terminated) {
       loop(files, file, "");
     }
   });
 
-  task.onAbort = () => {
-    aborted = true;
+  action.onTerminate = () => {
+    terminated = true;
   };
 };

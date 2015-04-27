@@ -10,29 +10,29 @@ const check_length = (i) => {
   }
 };
 
-const closed_peek = function (task) {
+const closed_peek = function (action) {
   if (this._buffer.length) {
-    task.success(this._buffer.peek());
+    action.success(this._buffer.peek());
   } else {
-    task.cancel();
+    action.cancel();
   }
 };
 
-const closed_pull = function (task) {
+const closed_pull = function (action) {
   if (this._buffer.length) {
-    task.success(this._buffer.pull());
+    action.success(this._buffer.pull());
   } else {
-    task.cancel();
+    action.cancel();
   }
 };
 
-const closed_push = (task, value) => {
-  task.cancel();
+const closed_push = (action, value) => {
+  action.cancel();
 };
 
-const closed_close = (task) => {
+const closed_close = (action) => {
   // TODO is this correct ? maybe it should simply do nothing if you close a Stream multiple times
-  task.error(new Error("Cannot close: stream is already closed"));
+  action.error(new Error("Cannot close: stream is already closed"));
 };
 
 
@@ -53,11 +53,11 @@ class StreamBase {
     // This cancels any pending peek/pull
     // This only happens if the buffer is empty
     for (let i = 0; i < a["length"]; ++i) {
-      a[i].task.cancel();
+      a[i].action.cancel();
     }
   }
 
-  close(task) {
+  close(action) {
     this.peek = closed_peek;
     this.pull = closed_pull;
     this.push = closed_push;
@@ -67,48 +67,48 @@ class StreamBase {
     this.cleanup();
 
     // TODO should this cancel ?
-    task.success(undefined);
+    action.success(undefined);
   }
 
-  peek(task) {
+  peek(action) {
     if (this._buffer.length) {
-      task.success(this._buffer.peek());
+      action.success(this._buffer.peek());
 
     } else {
       const info = {
         push: true,
-        task: task
+        action: action
       };
 
       this._pullers["push"](info);
 
-      task.onAbort = () => {
+      action.onTerminate = () => {
         // TODO is it possible for `this._pullers` to be `null` ?
         remove_array(this._pullers, info);
       };
     }
   }
 
-  pull(task) {
+  pull(action) {
     if (this._buffer.length) {
-      task.success(this._buffer.pull());
+      action.success(this._buffer.pull());
 
     } else {
       const info = {
         push: false,
-        task: task
+        action: action
       };
 
       this._pullers["push"](info);
 
-      task.onAbort = () => {
+      action.onTerminate = () => {
         // TODO is it possible for `this._pullers` to be `null` ?
         remove_array(this._pullers, info);
       };
     }
   }
 
-  push(task, value) {
+  push(action, value) {
     // If there is a pending pull
     if (this._pullers["length"]) {
       const f = this._pullers["shift"]();
@@ -117,17 +117,17 @@ class StreamBase {
         this._buffer.push(value);
       }
 
-      f.task.success(value);
-      task.success(undefined);
+      f.action.success(value);
+      action.success(undefined);
 
     // If there is room in the buffer
     } else if (this._buffer.length < this._limit) {
       this._buffer.push(value);
-      task.success(undefined);
+      action.success(undefined);
 
     // Buffer is full
     } else {
-      this.full(task, value);
+      this.full(action, value);
     }
   }
 }
@@ -148,11 +148,11 @@ class StreamFixed extends StreamBase {
 
     // TODO is it faster to use var or let ?
     for (let i = 0; i < a["length"]; ++i) {
-      a[i].task.cancel();
+      a[i].action.cancel();
     }
   }
 
-  pull(task) {
+  pull(action) {
     // If there is stuff in the buffer
     if (this._buffer.length) {
       const value = this._buffer.pull();
@@ -161,36 +161,36 @@ class StreamFixed extends StreamBase {
       if (this._pushers["length"]) {
         const f = this._pushers["shift"]();
         this._buffer.push(f.value);
-        f.task.success(undefined);
+        f.action.success(undefined);
       }
 
-      task.success(value);
+      action.success(value);
 
     // Buffer is empty, wait for push
     } else {
       const info = {
         push: false,
-        task: task
+        action: action
       };
 
       this._pullers["push"](info);
 
-      task.onAbort = () => {
+      action.onTerminate = () => {
         // TODO is it possible for `this._pullers` to be `null` ?
         array_remove(this._pullers, info);
       };
     }
   }
 
-  full(task, value) {
+  full(action, value) {
     const info = {
       value: value,
-      task: task
+      action: action
     };
 
     this._pushers["push"](info);
 
-    task.onAbort = () => {
+    action.onTerminate = () => {
       // TODO is it possible for `this._pushers` to be `null` ?
       array_remove(this._pushers, info);
     };
@@ -199,52 +199,52 @@ class StreamFixed extends StreamBase {
 
 
 class StreamSliding extends StreamBase {
-  full(task, value) {
+  full(action, value) {
     // TODO more efficient function for this
     this._buffer.pull();
     this._buffer.push(value);
-    task.success(undefined);
+    action.success(undefined);
   }
 }
 
 
 class StreamDropping extends StreamBase {
-  full(task, value) {
-    task.success(undefined);
+  full(action, value) {
+    action.success(undefined);
   }
 }
 
 
-export const stream_fixed = (i) => (task) => {
+export const stream_fixed = (i) => (action) => {
   if (check_length(i)) {
-    task.success(new StreamFixed(i));
+    action.success(new StreamFixed(i));
   }
 };
 
-export const stream_sliding = (i) => (task) => {
+export const stream_sliding = (i) => (action) => {
   if (check_length(i)) {
-    task.success(new StreamSliding(i));
+    action.success(new StreamSliding(i));
   }
 };
 
-export const stream_dropping = (i) => (task) => {
+export const stream_dropping = (i) => (action) => {
   if (check_length(i)) {
-    task.success(new StreamDropping(i));
+    action.success(new StreamDropping(i));
   }
 };
 
-export const peek = (stream) => (task) => {
-  stream.peek(task);
+export const peek = (stream) => (action) => {
+  stream.peek(action);
 };
 
-export const pull = (stream) => (task) => {
-  stream.pull(task);
+export const pull = (stream) => (action) => {
+  stream.pull(action);
 };
 
-export const push = (stream, value) => (task) => {
-  stream.push(task, value);
+export const push = (stream, value) => (action) => {
+  stream.push(action, value);
 };
 
-export const close = (stream) => (task) => {
-  stream.close(task);
+export const close = (stream) => (action) => {
+  stream.close(action);
 };

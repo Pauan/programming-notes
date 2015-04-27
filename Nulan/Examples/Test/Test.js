@@ -1,4 +1,4 @@
-import { run_root, _bind, _finally, on_cancel, ignore, success, log, concurrent, thread, delay, fastest, thread_kill, run } from "../FFI/Task";
+import { run_root, _bind, _finally, on_cancel, ignore, success, log, never, concurrent, thread, delay, fastest, thread_kill, run } from "../FFI/Task";
 import { push, pull, close, stream_fixed } from "../FFI/Stream";
 import { read_file, write_file, files_from_directory_recursive } from "../Node.js/FFI/fs";
 import { is_hidden_file } from "../Node.js/FFI/path";
@@ -25,11 +25,19 @@ const with_stream = (task) =>
 const stream_each = (_in, f) =>
   with_stream(forever(_bind(pull(_in), f)));
 
-const stream_foldl = (init, _in, f) => {
+/*const stream_foldl = (init, _in, f) => {
   const next = (old) =>
+    // TODO using on_cancel leaks memory, because it's not tail-recursive
     on_cancel(_bind(pull(_in), (value) =>
               _bind(f(old, value), next)),
               success(old));
+  return next(init);
+};*/
+
+const stream_foldl = (init, _in, f) => {
+  const next = (old) =>
+    _bind(pull(_in), (value) =>
+    _bind(f(old, value), next));
   return next(init);
 };
 
@@ -123,7 +131,10 @@ const increment = (i) =>
 
 /*const main = () =>
   fastest([increment(0),
-           delay(1000)]);*/
+           delay(5000)]);*/
+
+/*const main = () =>
+  thread(never());*/
 
 const main = () =>
   _bind(benchmark(copy_file("/home/pauan/Scratch/2014-09-30", "/home/pauan/Scratch/tmp/foo")), log);
@@ -147,9 +158,7 @@ setTimeout(() => {
   });
 }, 2000);*/
 
-/*run(ignore(success(10))).abort(() => {
-  console.log("DONE");
-});*/
+//run(ignore(success(10))).terminate();
 
 /*const main = () =>
   _bind(stream_fixed(5), (s) =>
