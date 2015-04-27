@@ -69,9 +69,15 @@ export const array_remove = (array, x) => {
 };
 
 
+/*
 // TODO use setImmediate shim
 export const nextTick =
-  // setImmediate is ~52.86 times faster than setTimeout
+  // setImmediate is ~52 times faster than setTimeout
   (typeof setImmediate === "function"
-    ? setImmediate                   // ~3,700
-    : (f) => { setTimeout(f, 0) });  // ~70
+    ? setImmediate                   // ~39,000
+    : (f) => { setTimeout(f, 0) });  // ~750
+*/
+
+export const nextTick = (f) => {
+  setImmediate(f);
+};

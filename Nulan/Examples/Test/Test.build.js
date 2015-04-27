@@ -647,24 +647,29 @@ Object.defineProperty(exports, "__esModule", {
 
 var _Queue$array_remove$nextTick = require("./Util");
 
+var error_stack = function error_stack(e) {
+  if (e.stack != null) {
+    return e.stack;
+  } else {
+    return e;
+  }
+};
+
 var print_fatal = function print_fatal(s) {
   // TODO code duplication with print_error
-  console.error("=".repeat(50) + "\n" + s + "\n" + "=".repeat(50));
+  console.error("\n" + "=".repeat(50) + "\n" + s + "\n" + "=".repeat(50));
 };
 
 var print_finished_error = function print_finished_error(e) {
-  // TODO code duplication with print_error
-  print_fatal("AN ERROR OCCURRED AFTER THE TASK WAS FINISHED!\n\n" + e.stack);
+  print_fatal("AN ERROR OCCURRED AFTER THE TASK WAS FINISHED!\n\n" + error_stack(e));
 };
 
 //const promise = Promise.resolve();
 
-var event_queue = new _Queue$array_remove$nextTick.Queue();
-
 // For Node.js only
 if (typeof process === "object" && typeof process.on === "function") {
   process.on("uncaughtException", function (e) {
-    print_fatal("AN UNCAUGHT ERROR OCCURRED!\n\n" + e.stack);
+    print_fatal("AN UNCAUGHT ERROR OCCURRED!\n\n" + error_stack(e));
     process.exit(1);
   });
 
@@ -674,48 +679,96 @@ if (typeof process === "object" && typeof process.on === "function") {
   });
 
   process.on("exit", function () {
+    // This should never happen, it's just a sanity check, just in case
     if (RUNNING_TASKS !== 0) {
       print_fatal("NODE.JS IS EXITING, BUT THERE ARE STILL " + RUNNING_TASKS + " TASKS PENDING!");
     }
   });
 }
 
-var event_queue_flush = function event_queue_flush() {
-  while (event_queue.length) {
-    event_queue.pull()();
+var task_queue = new _Queue$array_remove$nextTick.Queue();
+
+// Arbitrary number, just so long as it's big enough for normal use cases
+var TASK_QUEUE_MAX_CAPACITY = 1024;
+
+var TASK_QUEUE_FLUSHING = false;
+
+// Macrotask queue scheduler, similar to setImmediate
+var task_queue_flush = function task_queue_flush() {
+  if (!TASK_QUEUE_FLUSHING) {
+    (function () {
+      TASK_QUEUE_FLUSHING = true;
+
+      var loop = (function (_loop) {
+        function loop() {
+          return _loop.apply(this, arguments);
+        }
+
+        loop.toString = function () {
+          return _loop.toString();
+        };
+
+        return loop;
+      })(function () {
+        var pending = task_queue.length;
+
+        // Process all the tasks that were queued up, but if more tasks are queued, they are not processed
+        do {
+          // Pull the task out of the queue and then call it
+          task_queue.pull()();
+          --pending;
+        } while (pending !== 0);
+
+        // We're done processing all of the tasks
+        if (task_queue.length === 0) {
+          TASK_QUEUE_FLUSHING = false;
+
+          // Process any remaining tasks
+        } else {
+          // TODO this is necessary in order to abort infinite loops, but is there a better way ?
+          _Queue$array_remove$nextTick.nextTick(loop);
+        }
+      });
+
+      // TODO this is necessary in order to abort infinite loops, but is there a better way ?
+      _Queue$array_remove$nextTick.nextTick(loop);
+    })();
   }
 };
 
 // TODO is this a good idea ? it's useful for stuff like Streams, but do we want *all* Tasks to behave this way ?
 // TODO use the asap polyfill ?
-var asap = function asap(f) {
+var async = function async(f) {
   //return f();
 
   //promise["then"](f);
 
-  if (event_queue.length === 0) {
-    event_queue.push(f);
-    _Queue$array_remove$nextTick.nextTick(event_queue_flush);
-  } else {
-    event_queue.push(f);
+  //nextTick(f);
+
+  task_queue.push(f);
+
+  // Warn if the task queue gets too big
+  if (task_queue.length > TASK_QUEUE_MAX_CAPACITY) {
+    console.warn("Task queue has " + task_queue.length + " items, which is greater than the max capacity of " + TASK_QUEUE_MAX_CAPACITY);
   }
 
-  /*event_queue["push"](f);
-   if (event_queue["length"] === 1) {
-   }*/
+  _Queue$array_remove$nextTick.nextTick(task_queue_flush);
+
   //return f();
   //process.nextTick(f);
   //setImmediate(f);
   //setTimeout(f, 0);
 };
 
+exports.async = async;
 var RUNNING_TASKS = 0;
 
-var PENDING = 0;
-var SUCCEEDED = 1;
-var ERRORED = 2;
-var CANCELLED = 3;
-var ABORTED = 4;
+// TODO is using `| 0` a good idea? is there a better way to get Chrome to treat them as a small uint ?
+var PENDING = 0 | 0;
+var SUCCEEDED = 1 | 0;
+var ERRORED = 2 | 0;
+var CANCELLED = 3 | 0;
+var ABORTED = 4 | 0;
 
 var Task = (function () {
   function Task(onSuccess, onError, onCancel) {
@@ -750,7 +803,7 @@ var Task = (function () {
           _this._onCancel = null;
           _this.onAbort = null; // TODO what if somebody sets onAbort after the Task is succeeded ?
 
-          asap(function () {
+          async(function () {
             f(value);
             --RUNNING_TASKS; // TODO is this correct ?
           });
@@ -779,7 +832,7 @@ var Task = (function () {
           _this2._onCancel = null;
           _this2.onAbort = null; // TODO what if somebody sets onAbort after the Task is errored ?
 
-          asap(function () {
+          async(function () {
             f(e);
             --RUNNING_TASKS; // TODO is this correct ?
           });
@@ -804,7 +857,7 @@ var Task = (function () {
           _this3._onCancel = null;
           _this3.onAbort = null; // TODO what if somebody sets onAbort after the Task is cancelled ?
 
-          asap(function () {
+          async(function () {
             f();
             --RUNNING_TASKS; // TODO is this correct ?
           });
@@ -829,7 +882,8 @@ var Task = (function () {
 
         // Some tasks can't be aborted
         if (f !== null) {
-          // This can't use asap (see e.g._bind and _finally)
+          // We cannot use asap for this, or it will potentially cause problems (e.g. _bind and _finally)
+          // TODO we really want to be able to use asap for this, though, because otherwise we blow out the call stack
           f();
         }
 
@@ -991,7 +1045,7 @@ var Promise_from_Task = function Promise_from_Task(t) {
 
 exports.Promise_from_Task = Promise_from_Task;
 var print_error = function print_error(e) {
-  console.error(e.stack);
+  console.error(error_stack(e));
 };
 
 exports.print_error = print_error;
@@ -1013,7 +1067,7 @@ var block = function block() {
   // TODO maybe only do this on Node.js ?
   // TODO maybe provide a way to disable this ?
   // TODO test this
-  var timer = setInterval(function () {}, MAX_TIMER);
+  var timer = setInterval(noop, MAX_TIMER);
 
   return function (task) {
     clearInterval(timer);
@@ -1310,7 +1364,7 @@ var concurrent = function concurrent(a) {
       task.cancel();
     };
 
-    var _loop = function (i) {
+    var _loop2 = function (i) {
       // TODO test that this is always called asynchronously
       var t = run(a[i], function (value) {
         out[i] = value;
@@ -1321,7 +1375,7 @@ var concurrent = function concurrent(a) {
     };
 
     for (var i = 0; i < a.length; ++i) {
-      _loop(i);
+      _loop2(i);
     }
 
     task.onAbort = onAbort;
@@ -1440,22 +1494,22 @@ var Queue = (function () {
   }, {
     key: "push",
     value: function push(value) {
-      ++this.length;
-
-      if (this._left.length) {
-        this._right.push(value);
-      } else {
+      if (this.length === 0) {
         this._left.push(value);
+      } else {
+        this._right.push(value);
       }
+
+      ++this.length;
     }
   }, {
     key: "pull",
     value: function pull() {
-      --this.length;
-
       var left = this._left;
 
       var value = left.pop();
+
+      --this.length;
 
       if (left.length === 0) {
         var right = this._right;
@@ -1487,11 +1541,17 @@ var array_remove = function array_remove(array, x) {
 };
 
 exports.array_remove = array_remove;
+/*
+// TODO use setImmediate shim
+export const nextTick =
+  // setImmediate is ~52.86 times faster than setTimeout
+  (typeof setImmediate === "function"
+    ? setImmediate                   // ~3,700
+    : (f) => { setTimeout(f, 0) });  // ~70
+*/
+
 var nextTick = function nextTick(f) {
-  // Because we're using `event_queue`, we avoid the 4ms penalty of `setTimeout`.
-  // We could also use something like `setImmediate`, but that's not cross-platform.
-  // TODO use MutationObserver, setImmediate, nextTick, etc. if they're available
-  setTimeout(f, 0);
+  setImmediate(f);
 };
 exports.nextTick = nextTick;
 
@@ -1506,7 +1566,7 @@ var _push$pull$close = require("../../FFI/Stream");
 
 // "nulan:Stream"
 
-var _bind$run$_finally = require("../../FFI/Task");
+var _run$_finally$with_resource = require("../../FFI/Task");
 
 // "nulan:Task"
 
@@ -1570,7 +1630,7 @@ var read_from_Node = function read_from_Node(input, output) {
           (function () {
             // TODO is it possible for a "readable" event to trigger even if `chunk` is not `null` ?
             // TODO is it possible for onEnd to be called after the Stream is closed, and thus double-close it ?
-            var t = _bind$run$_finally.run(_push$pull$close.push(output, chunk), onReadable, onError, onEnd);
+            var t = _run$_finally$with_resource.run(_push$pull$close.push(output, chunk), onReadable, onError, onEnd);
 
             task.onAbort = function () {
               cleanup();
@@ -1639,7 +1699,7 @@ var write_to_Node = function write_to_Node(input, output) {
     var onDrain = function onDrain() {
       if (!finished) {
         (function () {
-          var t = _bind$run$_finally.run(_push$pull$close.pull(input), onSuccess, onError, onCancel);
+          var t = _run$_finally$with_resource.run(_push$pull$close.pull(input), onSuccess, onError, onCancel);
 
           task.onAbort = function () {
             cleanup();
@@ -1680,13 +1740,13 @@ var fs_open = function fs_open(path, flags) {
 };
 
 var with_fs_open = function with_fs_open(path, flags, f) {
-  return with_resource(fs_open(path, flags), f, fs_close);
+  return _run$_finally$with_resource.with_resource(fs_open(path, flags), f, fs_close);
 };
 
 exports.with_fs_open = with_fs_open;
 var read_file = function read_file(path, output) {
   return with_fs_open(path, "r", function (fd) {
-    return _bind$run$_finally._finally(read_from_Node(_fs.createReadStream(null, { encoding: "utf8", fd: fd, autoClose: false }), output),
+    return _run$_finally$with_resource._finally(read_from_Node(_fs.createReadStream(null, { encoding: "utf8", fd: fd, autoClose: false }), output),
     // TODO maybe this shouldn't close, but should instead let the caller close it ?
     _push$pull$close.close(output));
   });
@@ -1886,13 +1946,13 @@ exports.is_hidden_file = is_hidden_file;
 },{"path":2}],9:[function(require,module,exports){
 "use strict";
 
-var _run_root$_bind$_finally$on_cancel$ignore$success$log$concurrent$thread$delay$race$thread_kill$run = require("./FFI/Task");
+var _run_root$_bind$_finally$on_cancel$ignore$success$log$concurrent$thread$delay$race$thread_kill$run = require("../FFI/Task");
 
-var _push$pull$close$stream_fixed = require("./FFI/Stream");
+var _push$pull$close$stream_fixed = require("../FFI/Stream");
 
-var _read_file$write_file$files_from_directory_recursive = require("./Node.js/FFI/fs");
+var _read_file$write_file$files_from_directory_recursive = require("../Node.js/FFI/fs");
 
-var _is_hidden_file = require("./Node.js/FFI/path");
+var _is_hidden_file = require("../Node.js/FFI/path");
 
 var debug = function debug(s, x) {
   console.log(s);
@@ -2041,6 +2101,22 @@ var log_current_time = function log_current_time(max) {
   return next(0);
 };
 
+var increment = (function (_increment) {
+  function increment(_x6) {
+    return _increment.apply(this, arguments);
+  }
+
+  increment.toString = function () {
+    return _increment.toString();
+  };
+
+  return increment;
+})(function (i) {
+  return _run_root$_bind$_finally$on_cancel$ignore$success$log$concurrent$thread$delay$race$thread_kill$run._bind(_run_root$_bind$_finally$on_cancel$ignore$success$log$concurrent$thread$delay$race$thread_kill$run.log(i), function (_) {
+    return increment(i + 1);
+  });
+});
+
 //////////////////////////////////////////////////////////////////////////////
 
 /*const main = () =>
@@ -2049,21 +2125,27 @@ var log_current_time = function log_current_time(max) {
 /*const main = () =>
   forever(success(5));*/
 
-var main = function main() {
-  return _run_root$_bind$_finally$on_cancel$ignore$success$log$concurrent$thread$delay$race$thread_kill$run._bind(_push$pull$close$stream_fixed.stream_fixed(1), function (s) {
-    return _run_root$_bind$_finally$on_cancel$ignore$success$log$concurrent$thread$delay$race$thread_kill$run.concurrent([forever(_push$pull$close$stream_fixed.push(s, 1)), forever(_push$pull$close$stream_fixed.pull(s))]);
-  });
-};
+/*const main = () =>
+  _bind(stream_fixed(1), (s) =>
+    concurrent([forever(push(s, 1)),
+                forever(pull(s))]));*/
 
 /*const main = () =>
   _bind(stream_fixed(1), (s) =>
     _bind(thread(forever(push(s, 1))), (_) =>
       thread(forever(pull(s)))));*/
 
+//const main = () => increment(0);
+
+var main = function main() {
+  return _run_root$_bind$_finally$on_cancel$ignore$success$log$concurrent$thread$delay$race$thread_kill$run.race([increment(0), _run_root$_bind$_finally$on_cancel$ignore$success$log$concurrent$thread$delay$race$thread_kill$run.delay(60000)]);
+};
+
 /*const main = () =>
-  race([forever(_bind(current_time, log)),
-        _bind(delay(1000), (_) =>
-          log("done"))]);*/
+  forever(_bind(current_time, log));*/
+
+/*const main = () =>
+  forever(log_current_time(10));*/
 
 /*const main = () =>
   race([log_current_time(10),
@@ -2101,13 +2183,13 @@ setTimeout(() => {
 
       generate_multiply(x),
 
-      //accumulate(x),
+      accumulate(x),
 
       _bind(delay(1000), (_) =>
         debug("CLOSING", close(x)))
     ]));*/
 
-// browserify --transform babelify Nulan/Examples/Test.js --outfile Nulan/Examples/Test.build.js
+// browserify --transform babelify Nulan/Examples/Test/Test.js --outfile Nulan/Examples/Test/Test.build.js
 _run_root$_bind$_finally$on_cancel$ignore$success$log$concurrent$thread$delay$race$thread_kill$run.run_root(main);
 
-},{"./FFI/Stream":4,"./FFI/Task":5,"./Node.js/FFI/fs":7,"./Node.js/FFI/path":8}]},{},[9]);
+},{"../FFI/Stream":4,"../FFI/Task":5,"../Node.js/FFI/fs":7,"../Node.js/FFI/path":8}]},{},[9]);

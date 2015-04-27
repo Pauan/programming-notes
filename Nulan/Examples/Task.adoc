@@ -5,20 +5,23 @@
 
 (TYPE (Thread Value))
 
-(EXPORT { error
+(EXPORT { FFI-PROGRAM-START
+          error
           cancel
           never
           finally = _finally
           on-cancel = on_cancel
           w/resource
-          execute
+          # TODO maybe rename `execute` to something else ?
+          Task<- = execute
           ignore
           # TODO get rid of all thread stuff ?
           thread
-          thread/wait = thread_wait
-          thread/kill! = thread_kill
+          thread-wait = thread_wait
+          thread-kill! = thread_kill
+          sequential
           concurrent
-          race
+          fastest
           delay
           log }
 
@@ -28,14 +31,21 @@
     (success :: (FORALL A
                   (-> A (Task A))))
 
+
+    "When executed, causes an error to occur."
     (error :: (FORALL A
                 (-> String (Task A))))
 
+
+    "When executed, causes a cancellation to occur."
     (cancel :: (FORALL A
                  (-> (Task A))))
 
+
+    "When executed, never returns, errors, or cancels."
     (never :: (FORALL A
                 (-> (Task A))))
+
 
     (_bind :: (FORALL A B
                 (-> (Task A)
@@ -48,61 +58,429 @@
                             (-> A (Task Void))
                             (Task B))))
 
+
+    "When executed, executes the first `Task`, and then executes the second
+     `Task`. The second `Task` is *always* executed, even if the first `Task`
+     returns, errors, cancels, or aborts."
     (_finally :: (FORALL A
                    (-> (Task A)
                        (Task Void)
                        (Task A))))
 
+
+    "When executed, executes the first `Task`. If the first `Task` cancels,
+     then it will execute the second `Task`.
+
+     If the first `Task` does not cancel, then the final result is the first
+     `Task`.
+
+     If the first `Task` does cancel, then the final result is the second
+     `Task`."
     (on_cancel :: (FORALL A
                     (-> (Task A)
                         (Task A)
                         (Task A))))
 
+
+    "When executed, calls the function.
+
+     If the function throws an exception, then that is captured and converted
+     into a `Task`.
+
+     If the function does not throw an exception, then the return value is
+     put into a `Task`.
+
+     ''''
+
+     Pure code is allowed to throw exceptions, but it's not possible to deal
+     with exceptions in pure code. By using `Task<-`, you can take a pure
+     computation (which potentially throws an exception), convert it into a
+     `Task`, and then deal with it:
+
+     [source,nulan]
+     ----
+     (finally (Task<- -> (foo))
+              (bar))
+     ----
+
+     You should use `Task<-` when you have a pure *computation* that you want
+     to convert into a `Task`.
+
+     If you already have a `Task`, then you don't need to use `Task<-`.
+
+     In addition, if you have a pure *value* that you want to convert into a
+     `Task`, you can just use `wrap` instead:
+
+     [source,nulan]
+     ----
+     (finally (wrap 5)
+              (bar))
+     ----
+
+     The only difference between `wrap` and `Task<-` is that `wrap` doesn't
+     capture thrown exceptions. So if your code doesn't throw exceptions,
+     then using `wrap` is perfectly fine."
     (execute :: (FORALL A
                   (-> (-> A) (Task A))))
 
+
+    "When executed, executes the `Task`.
+
+     If the `Task` returns, then the final result is `Void`.
+
+     If the `Task` errors, then this `Task` errors.
+
+     If the `Task` cancels, then this `Task` cancels.
+
+     ''''
+
+     This is useful if you aren't interested in the return value of a `Task`:
+
+     [source,nulan]
+     ----
+     (ignore (foo))
+     ----"
     (ignore :: (FORALL A
                  (-> (Task A)
                      (Task Void))))
 
+
+    "When executed, starts executing the `Task` in a new thread, then
+     immediately returns the `Thread`.
+
+     Any errors are logged to the console.
+
+     ''''
+
+     That means that the `Task` will run in parallel with all other `Task`s
+     in the program:
+
+     [source,nulan]
+     ----
+     # This will simultaneously log both 1 and 2
+     (DO (ignore-thread (forever (log "1")))
+         (ignore-thread (forever (log "2"))))
+     ----
+
+     Sometimes that is exactly what you want, but you should use `thread`
+     sparingly: having many `Task`s running simultaneously at arbitrary times
+     can make your program much more difficult to understand.
+
+     Instead, consider using `concurrent` or `fastest`, which are much easier
+     to understand. Using `concurrent` or `fastest` also handles errors better
+     than `thread`.
+
+     So, when should you use `thread`? Well, basically, whenever `concurrent`
+     and `fastest` don't work for what you're trying to do.
+
+     But perhaps you can find an alternate design that _does_ work with
+     `concurrent` or `fastest`."
     (thread :: (FORALL A
                  (-> (Task A) (Thread A))))
 
+
+    "When executed, waits for the `Thread` to finish, then returns the value
+     of the `Thread`.
+
+     ''''
+
+     When a `Task` is executed in a new thread using `thread`, it will execute
+     in parallel with all other `Task`s. That means you can no longer get the
+     return value of that `Task`.
+
+     But by using `thread-wait`, you can wait for a `Thread` to finish, so
+     that you can get the return value of the `Task`:
+
+     [source,nulan]
+     ----
+     (DO t = (thread (foo))
+         # Waits for the thread to finish,
+         # then returns the value of (foo)
+         (thread-wait t))
+     ----
+
+     Of course, in the above example it would have been better to just use
+     `(foo)` directly, and not use `thread` at all. It becomes more
+     useful when using multiple threads:
+
+     [source,nulan]
+     ----
+     (DO t1 = (thread (foo))
+         t2 = (thread (bar))
+         v1 = (thread-wait t1)
+         v2 = (thread-wait t2)
+         (qux v1 v2))
+     ----
+
+     The above code will execute `(foo)` and `(bar)` in parallel, then wait
+     for both to complete, and then call `qux` with the return value of
+     `(foo)` and `(bar)`.
+
+     However, the above can be done more concisely and efficiently by using
+     `concurrent`:
+
+     [source,nulan]
+     ----
+     (DO (list v1 v2) = (concurrent (foo) (bar))
+         (qux v1 v2))
+     ----"
     (thread_wait :: (FORALL A
                       (-> (Thread A) (Task A))))
 
+
+    "When executed, kills the `Thread`, aborting any partially-complete
+     computations.
+
+     It will try to stop the computations as soon as possible, but they might
+     not be stopped immediately. And in some unusual circumstances, some
+     computations may still occur even after the `Thread` is killed.
+
+     If the `Thread` is already finished, this has no effect.
+
+     ''''
+
+     This can be used to abort a long-running computation:
+
+     [source,nulan]
+     ----
+     (DO t = (thread (forever (log "1")))
+         (delay 2000)
+         (thread-kill! t))
+     ----
+
+     The above code will log `"1"` to the console forever, but after `2000`
+     milliseconds, it will kill the `Thread`, causing it to stop logging.
+
+     However, the above example can instead be written using `fastest`, which
+     is more concise, more efficient, and handles errors better than `thread`:
+
+     [source,nulan]
+     ----
+     (fastest
+       (forever (log "1"))
+       (delay 2000))
+     ----
+
+     So you should prefer using `fastest` rather than `thread-kill!`, whenever
+     you can."
     (thread_kill :: (FORALL A
                       (-> (Thread A) (Task Void))))
 
+
+    "When executed, executes all the `Task`s in the `List`, one at a time,
+     from left to right, then returns a `List` of the return values of the
+     `Task`s.
+
+     ''''
+
+     This is the same as using `DO`:
+
+     [source,nulan]
+     ----
+     (DO a = (foo)
+         b = (bar)
+         c = (qux)
+         (wrap (list a b c)))
+     ----
+
+     [source,nulan]
+     ----
+     (sequential (foo) (bar) (qux))
+     ----
+
+     The above two code examples are equivalent: both execute three `Task`s
+     sequentially, returning a `List` of the results.
+
+     The difference is that `sequential` can take in a `List` of `Task`s:
+
+     [source,nulan]
+     ----
+     (sequential @list-of-tasks)
+     ----
+
+     In this case, we have no clue how big `list-of-tasks` is. It could
+     contain dozens, hundreds, or even thousands of `Task`s.
+
+     With `DO`, you can only execute a fixed number of `Task`s, but with
+     `sequential` you can execute a variable number of `Task`s."
+    (sequential :: (FORALL A
+                     (-> @(Task A) (Task (List A)))))
+
+
+    "When executed, executes all the `Task`s in the `List` in parallel, and
+     when they're all finished, returns a `List` of the return values of the
+     `Task`s.
+
+     If any of the `Task`s errors or cancels, the remaining `Task`s are
+     aborted.
+
+     ''''
+
+     If you need to execute `Task`s in parallel, this is a much nicer
+     alternative to using `thread`:
+
+     [source,nulan]
+     ----
+     (DO t1 = (thread (foo))
+         t2 = (thread (bar))
+         t3 = (thread (qux))
+         v1 = (thread-wait t1)
+         v2 = (thread-wait t2)
+         v3 = (thread-wait t3)
+         (wrap (list v1 v2 v3)))
+     ----
+
+     [source,nulan]
+     ----
+     (concurrent (foo) (bar) (qux))
+     ----
+
+     The above two code examples are equivalent: they both execute three
+     `Task`s in parallel, then waits for them all to complete, and then
+     returns a `List` with the return values.
+
+     But `concurrent` is much more concise, and more efficient too! In
+     addition, it handles errors much better than `thread`.
+
+     Also, `concurrent` accepts a `List` of `Task`s, which is much trickier
+     to do with `thread`:
+
+     [source,nulan]
+     ----
+     (concurrent @list-of-tasks)
+     ----
+
+     So you should prefer using `concurrent` rather than `thread`."
     (concurrent :: (FORALL A
                      (-> @(Task A) (Task (List A)))))
 
-    (race :: (FORALL A
-               (-> @(Task A) (Task A))))
 
+    "When executed, executes all the `Task`s in the `List` in parallel.
+
+     The `Task` that returns first is the final result.
+
+     If any of the `Task`s returns, errors, or cancels, the remaining `Task`s
+     are aborted.
+
+     ''''
+
+     This is a nicer alternative to `thread-kill!`:
+
+     [source,nulan]
+     ----
+     (DO t = (thread (foo))
+         (delay 2000)
+         (thread-kill! t))
+     ----
+
+     [source,nulan]
+     ----
+     (fastest (foo) (delay 2000))
+     ----
+
+     The above two code examples are equivalent: they both execute `(foo)` in
+     parallel, and then aborts it if it takes longer than `2000` milliseconds.
+
+     But `fastest` is more concise, and more efficient too! In addition, it
+     handles errors much better than `thread`.
+
+     Also, `fastest` accepts a `List` of `Task`s, which is much trickier
+     to do with `thread`:
+
+     [source,nulan]
+     ----
+     (fastest @list-of-tasks)
+     ----
+
+     Also, `fastest` returns the value of whichever `Task` finished first,
+     which is *incredibly* hard to do with `thread`:
+
+     [source,nulan]
+     ----
+     (DO x = (fastest (foo) (bar) (qux))
+         (corge x))
+     ----
+
+     So you should prefer using `fastest` rather than `thread`."
+    (fastest :: (FORALL A
+                  (-> @(Task A) (Task A))))
+
+
+    "When executed, it will wait for a certain number of milliseconds, and
+     then returns `Void`.
+
+     It will always wait at least the specified number of milliseconds, but it
+     might wait longer.
+
+     ''''
+
+     [source,nulan]
+     ----
+     # Wait 1000 milliseconds before executing (foo)
+     (DO (delay 1000)
+         (foo))
+     ----"
     (delay :: (-> Integer (Task Void)))
 
+
+    "When executed, it will log the `String` to the console, and then returns
+     `Void`.
+
+     ''''
+
+     [source,nulan]
+     ----
+     # Logs 1, then 2, then 3 to the console
+     (DO (log "1")
+         (log "2")
+         (log "3"))
+     ----"
     (log :: (-> String (Task Void))))
 
   # TODO is there a better way of handling this ?
   (MACRO
+    "Calls the function `main` (which is supposed to return a `Task`) and then
+     executes the `Task`. Any errors are logged to the console."
     (FFI-PROGRAM-START)
       `(run_root ,(symbol "main")))
 
   (MACRO
+    "When executed, executes the first `Task`, binding the return value to a
+     variable. Then the second `Task` is executed, and afterwards the third
+     `Task` is executed. The third `Task` is *always* run, even if the second
+     `Task` returns, errors, cancels, or aborts. If the second `Task` returns,
+     then that is the final return value.
+
+     This is very useful for initializing a resource, using the resource, and
+     then cleaning up the resource:
+
+     [source,nulan]
+     ----
+     (w/resource x = (open-file \"foo\")
+       (use-file x)
+       (close-file x))
+     ----
+
+     If you had used `DO` and `finally`, then the file may end up leaking,
+     but by using `w/resource` you guarantee that the file will *always* be
+     closed."
     (w/resource `(,name = ,before) during after)
       `(with_resource ,before
          (-> ,name ,during)
          (-> ,name ,after)))
 
   (IMPLEMENT Task
+    "When executed, returns its argument."
     (wrap x)
       (success x)
 
+    "When executed, executes the `Task`, then passes the return value to
+     the function, then returns the `Task` that the function returns."
     (bind x f)
       (_bind x f)))
 
 (FUNCTION
+  "When executed, executes the `Task` forever, as quickly as possible."
   (forever :: (FORALL A
                 (-> (Task Void) (Task A))))
   (forever task)
@@ -110,18 +488,29 @@
         (forever task)))
 
 (FUNCTION
+  "When executed, executes the `Task`, but if it takes longer than a certain
+   number of milliseconds, the `Task` is aborted."
   (timeout :: (FORALL A
                 (-> Integer (Task Void) (Task Void))))
   (timeout ms task)
-    (race task (delay ms)))
+    (fastest task (delay ms)))
 
 (FUNCTION
+  "The same as `sequential`, except it returns `Void` rather than a `List`."
+  (ignore-sequential :: (FORALL A
+                          (-> @(Task A) (Task Void))))
+  (ignore-sequential @in)
+    (ignore (sequential @in)))
+
+(FUNCTION
+  "The same as `concurrent`, except it returns `Void` rather than a `List`."
   (ignore-concurrent :: (FORALL A
                           (-> @(Task A) (Task Void))))
   (ignore-concurrent @in)
     (ignore (concurrent @in)))
 
 (FUNCTION
+  "The same as `thread`, except it returns `Void` rather than a `Thread`."
   (ignore-thread :: (FORALL A
                       (-> (Task A) (Task Void))))
   (ignore-thread task)

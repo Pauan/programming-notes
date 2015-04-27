@@ -147,7 +147,7 @@
                             (Task Void))))
   (stream/flatten! in out)
     (stream/each! in -> value
-      (ignore-sequence
+      (ignore-sequential
         @(map value -> value
            (push! value out)))))
 ----

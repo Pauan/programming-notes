@@ -1,4 +1,4 @@
-import { run_root, _bind, _finally, on_cancel, ignore, success, log, concurrent, thread, delay, race, thread_kill, run } from "../FFI/Task";
+import { run_root, _bind, _finally, on_cancel, ignore, success, log, concurrent, thread, delay, fastest, thread_kill, run } from "../FFI/Task";
 import { push, pull, close, stream_fixed } from "../FFI/Stream";
 import { read_file, write_file, files_from_directory_recursive } from "../Node.js/FFI/fs";
 import { is_hidden_file } from "../Node.js/FFI/path";
@@ -37,8 +37,21 @@ const copy_file = (from, to) =>
   _bind(stream(), (s) =>
     ignore_concurrent([read_file(from, s), write_file(s, to)]));
 
-const current_time = (task) =>
+const current_time = (task) => {
   task.success(Date.now());
+};
+
+const benchmark = (t) => {
+  const end = Date["now"]() + 10000;
+  const next = (i) => {
+    if (Date["now"]() < end) {
+      return _bind(t, (_) => next(i + 1));
+    } else {
+      return success(i);
+    }
+  };
+  return next(0);
+};
 
 
 //////////////////////////////////////////////////////////////////////////////
@@ -108,9 +121,12 @@ const increment = (i) =>
 
 //const main = () => increment(0);
 
+/*const main = () =>
+  fastest([increment(0),
+           delay(1000)]);*/
+
 const main = () =>
-  race([increment(0),
-        delay(10000)]);
+  _bind(benchmark(copy_file("/home/pauan/Scratch/2014-09-30", "/home/pauan/Scratch/tmp/foo")), log);
 
 /*const main = () =>
   forever(_bind(current_time, log));*/
@@ -119,8 +135,8 @@ const main = () =>
   forever(log_current_time(10));*/
 
 /*const main = () =>
-  race([log_current_time(10),
-        success(5)]);*/
+  fastest([log_current_time(10),
+           success(5)]);*/
 
 /*const t = run(_finally(success(1), success(2)), () => {}, () => {}, () => {});
 
@@ -160,5 +176,5 @@ setTimeout(() => {
         debug("CLOSING", close(x)))
     ]));*/
 
-// browserify --transform babelify Nulan/Examples/Test.js --outfile Nulan/Examples/Test.build.js
+// browserify --transform babelify Nulan/Examples/Test/Test.js --outfile Nulan/Examples/Test/Test.build.js
 run_root(main);

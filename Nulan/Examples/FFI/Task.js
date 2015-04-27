@@ -99,7 +99,7 @@ export const async = (f) => {
                     TASK_QUEUE_MAX_CAPACITY);
   }
 
-  nextTick(task_queue_flush);
+  task_queue_flush();
 
   //return f();
   //process.nextTick(f);
@@ -391,7 +391,7 @@ export const run_root = (f) => {
   }
 };
 
-// This can be implemented purely with `execute`,
+// This can be implemented entirely with `execute`,
 // but it's faster to implement it like this
 export const success = (x) => (task) => {
   task.success(x);
@@ -431,7 +431,6 @@ export const _bind = (x, f) => (task) => {
     if (!aborted) {
       const t2 = run(f(value), success, error, cancel);
 
-      // TODO is it even possible for this to occur ?
       task.onAbort = () => {
         t2.abort();
       };
@@ -507,9 +506,10 @@ export const _finally = (before, after) => (task) => {
   });
 
   task.onAbort = () => {
+    // Successfully aborted `t`
     if (t.abort()) {
       // This task is run no matter what, even if it is aborted
-      // There's nothing to return, so we use `noop`
+      // There's nothing to return, so we just use `noop`
       run(after, noop, error, cancel);
     }
   };
@@ -554,7 +554,7 @@ export const execute = (f) => (task) => {
   }
 };
 
-// This can be implemented purely with bind + wrap,
+// This can be implemented entirely with bind + wrap,
 // but it's more efficient to implement it with the FFI
 export const ignore = (x) => (task) => {
   const t = run(x, (_) => {
@@ -589,6 +589,43 @@ export const abortAll = (tasks) => {
   for (let i = 0; i < tasks["length"]; ++i) {
     tasks[i].abort();
   }
+};
+
+// TODO verify that this works correctly in all situations
+// This can be implemented entirely in Nulan, but it's much more efficient to implement it in here
+export const sequential = (a) => (task) => {
+  const out = new Array(a["length"]);
+
+  let aborted = false;
+
+  const onError = (e) => {
+    task.error(e);
+  };
+
+  const onCancel = () => {
+    task.cancel();
+  };
+
+  const loop = (i) => {
+    if (i < a["length"]) {
+      const t = run(a[i], (value) => {
+        if (!aborted) {
+          out[i] = value;
+          loop(i + 1);
+        }
+      }, onError, onCancel);
+
+      task.onAbort = () => {
+        aborted = true;
+        t.abort();
+      };
+
+    } else {
+      task.success(out);
+    }
+  };
+
+  loop(0);
 };
 
 // TODO verify that this works correctly in all situations
@@ -643,7 +680,7 @@ export const concurrent = (a) => (task) => {
 };
 
 // TODO verify that this works correctly in all situations
-export const race = (a) => (task) => {
+export const fastest = (a) => (task) => {
   const tasks = [];
 
   let done = false;
