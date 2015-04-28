@@ -25,7 +25,6 @@
           sequential
           concurrent
           fastest
-          delay
           log }
 
   (FFI-IMPORT "FFI/Task"
@@ -396,23 +395,6 @@
                   (-> @(Task A) (Task A))))
 
 
-    "When executed, it will wait for a certain number of milliseconds, and
-     then returns `Void`.
-
-     It will always wait at least the specified number of milliseconds, but it
-     might wait longer.
-
-     ''''
-
-     [source,nulan]
-     ----
-     # Wait 1000 milliseconds before executing (foo)
-     (DO (delay 1000)
-         (foo))
-     ----"
-    (delay :: (-> Integer (Task Void)))
-
-
     "When executed, it will log the `String` to the console, and then returns
      `Void`.
 
@@ -521,15 +503,6 @@
   (forever task)
     (DO task
         (forever task)))
-
-(FUNCTION
-  "When executed, executes the `Task`, but if it takes longer than a certain
-   number of milliseconds, the `Task` is terminated."
-  (timeout :: (FORALL A
-                (-> Integer (Task Void) (Task Void))))
-  (timeout ms task)
-    # TODO if it times out, maybe it should cancel rather than returning Void ?
-    (fastest task (delay ms)))
 
 (FUNCTION
   "The same as `sequential`, except it returns `Void` rather than a `List`."

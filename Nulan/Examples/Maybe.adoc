@@ -1,3 +1,6 @@
+.Maybe.nu
+[source]
+----
 (TYPE (Maybe A)
   (*something A)
   (*nothing))
@@ -25,3 +28,4 @@
         value
       (*nothing)
         y))
+----

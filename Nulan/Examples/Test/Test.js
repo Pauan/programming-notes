@@ -1,4 +1,5 @@
-import { _void, run_root, _bind, _finally, on_cancel, success, log, never, concurrent, thread, delay, fastest, thread_kill, run } from "../FFI/Task";
+import { _void, run_root, _bind, _finally, on_cancel, success, log, never, concurrent, thread, fastest, thread_kill, run } from "../FFI/Task";
+import { delay, current_time } from "../FFI/Time";
 import { push, pull, close, stream_fixed } from "../FFI/Stream";
 import { read_file, write_file, files_from_directory_recursive } from "../Node.js/FFI/fs";
 import { is_hidden_file } from "../Node.js/FFI/path";
@@ -37,10 +38,6 @@ const stream_foldl = (init, _in, f) => {
 const copy_file = (from, to) =>
   _bind(stream(), (s) =>
     ignore_concurrent([read_file(from, s), write_file(s, to)]));
-
-const current_time = (action) => {
-  action.success(Date["now"]());
-};
 
 const benchmark = (task) =>
   _bind(current_time, (now) => {

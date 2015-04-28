@@ -1,10 +1,40 @@
+.Time.nu
+[source]
+----
 (USE {} = "nulan:Task")
 
 
-(EXPORT { current-time = current_time }
+(EXPORT { delay
+          current-time = current_time }
+
   (FFI-IMPORT "FFI/Time"
+    "When executed, it will wait for a certain number of milliseconds, and
+     then returns `Void`.
+
+     It will always wait at least the specified number of milliseconds, but it
+     might wait longer.
+
+     ''''
+
+     [source,nulan]
+     ----
+     # Wait 1000 milliseconds before executing (foo)
+     (DO (delay 1000)
+         (foo))
+     ----"
+    (delay :: (-> Integer (Task Void)))
+
     (current_time :: (Task Integer))))
 
+
+(FUNCTION
+  "When executed, executes the `Task`, but if it takes longer than a certain
+   number of milliseconds, the `Task` is terminated."
+  (timeout :: (FORALL A
+                (-> Integer (Task Void) (Task Void))))
+  (timeout ms task)
+    # TODO if it times out, maybe it should cancel rather than returning Void ?
+    (fastest task (delay ms)))
 
 (FUNCTION
   (benchmark :: (-> (Task Void) (Task Integer)))
@@ -18,3 +48,4 @@
               (DO task
                   (next (add i 1)))
               (wrap i)))))))
+----

@@ -585,16 +585,6 @@ export const fastest = (a) => (action) => {
 
 
 // Often-used functionality
-export const delay = (ms) => (action) => {
-  const timer = setTimeout(() => {
-    action.success(undefined);
-  }, ms);
-
-  action.onTerminate = () => {
-    clearTimeout(timer);
-  };
-};
-
 export const log = (s) => (action) => {
   console["log"](s);
   action.success(undefined);
