@@ -1,4 +1,4 @@
-import { run_root, _bind, _finally, on_cancel, ignore, success, log, never, concurrent, thread, delay, fastest, thread_kill, run } from "../FFI/Task";
+import { _void, run_root, _bind, _finally, on_cancel, success, log, never, concurrent, thread, delay, fastest, thread_kill, run } from "../FFI/Task";
 import { push, pull, close, stream_fixed } from "../FFI/Stream";
 import { read_file, write_file, files_from_directory_recursive } from "../Node.js/FFI/fs";
 import { is_hidden_file } from "../Node.js/FFI/path";
@@ -9,7 +9,8 @@ const debug = (s, x) => {
   return x;
 };
 
-const _void = () => undefined;
+const ignore = (x) =>
+  _bind(x, (_) => _void);
 
 const ignore_concurrent = (a) =>
   ignore(concurrent(a));
@@ -20,24 +21,16 @@ const forever = (task) =>
   _bind(task, (_) => forever(task));
 
 const with_stream = (task) =>
-  on_cancel(ignore(task), success(_void()));
+  on_cancel(task, (_) => _void, _void);
 
 const stream_each = (_in, f) =>
   with_stream(forever(_bind(pull(_in), f)));
 
-/*const stream_foldl = (init, _in, f) => {
-  const next = (old) =>
-    // TODO using on_cancel leaks memory, because it's not tail-recursive
-    on_cancel(_bind(pull(_in), (value) =>
-              _bind(f(old, value), next)),
-              success(old));
-  return next(init);
-};*/
-
 const stream_foldl = (init, _in, f) => {
   const next = (old) =>
-    _bind(pull(_in), (value) =>
-    _bind(f(old, value), next));
+    on_cancel(_bind(pull(_in), (value) => f(old, value)),
+              next,
+              success(old));
   return next(init);
 };
 
@@ -79,15 +72,15 @@ const generate_multiply = (out) => {
   return with_stream(next(1));
 };
 
-/*const accumulate = (_in) =>
+const accumulate = (_in) =>
   stream_foldl(0, _in, (old, value) => {
     const _new = old + value;
     return _bind(log(_new), (_) => success(_new));
-  });*/
+  });
 
-const accumulate = (_in) =>
+/*const accumulate = (_in) =>
   stream_foldl(0, _in, (old, value) =>
-    success(old + value));
+    success(old + value));*/
 
 
 const log_current_time = (max) => {
@@ -97,7 +90,7 @@ const log_current_time = (max) => {
         _bind(log(now), (_) => next(i + 1)));
 
     } else {
-      return success(_void());
+      return _void;
     }
   };
   return next(0);
@@ -111,8 +104,7 @@ const increment = (i) =>
 //////////////////////////////////////////////////////////////////////////////
 
 
-/*const main = () =>
-  success(_void());*/
+/*const main = () => _void;*/
 
 /*const main = () =>
   forever(success(5));*/
@@ -131,13 +123,17 @@ const increment = (i) =>
 
 /*const main = () =>
   fastest([increment(0),
-           delay(5000)]);*/
+           delay(1000)]);*/
 
 /*const main = () =>
   thread(never());*/
 
-const main = () =>
-  _bind(benchmark(copy_file("/home/pauan/Scratch/2014-09-30", "/home/pauan/Scratch/tmp/foo")), log);
+/*const main = () =>
+  _bind(thread(forever(log("a"))), (_) =>
+    forever(log("b")));*/
+
+/*const main = () =>
+  _bind(benchmark(copy_file("/home/pauan/Scratch/2014-09-30", "/home/pauan/Scratch/tmp/foo")), log);*/
 
 /*const main = () =>
   forever(_bind(current_time, log));*/
@@ -172,7 +168,7 @@ setTimeout(() => {
   _bind(files_from_directory_recursive("/home/pauan/Scratch"), (a) =>
     log(a.filter((x) => !is_hidden_file(x))));*/
 
-/*const main = () =>
+const main = () =>
   _bind(stream(), (x) =>
     ignore_concurrent([
       generate_add(x),
@@ -181,9 +177,9 @@ setTimeout(() => {
 
       accumulate(x),
 
-      _bind(delay(1000), (_) =>
-        debug("CLOSING", close(x)))
-    ]));*/
+      /*_bind(delay(1000), (_) =>
+        debug("CLOSING", close(x)))*/
+    ]));
 
 // browserify --transform babelify Nulan/Examples/Test/Test.js --outfile Nulan/Examples/Test/Test.build.js
 run_root(main);

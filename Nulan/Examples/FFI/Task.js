@@ -1,4 +1,4 @@
-import { Queue, array_remove, async, error_stack, fatal_error, print_error } from "./Util";
+import { array_remove, async, error_stack, fatal_error, print_error } from "./Util";
 
 
 let RUNNING_TASKS = 0;
@@ -176,7 +176,7 @@ class Thread {
 
       // TODO test this
       action.onTerminate = () => {
-        remove_array(this._listeners, action);
+        array_remove(this._listeners, action);
       };
       break;
 
@@ -291,6 +291,10 @@ export const cancel = () => (action) => {
 // TODO what if the action is terminated ?
 export const never = () => (action) => {};
 
+export const _void = (action) => {
+  action.success(undefined);
+};
+
 export const _bind = (task, f) => (action) => {
   // TODO is this necessary ?
   let terminated = false;
@@ -396,34 +400,34 @@ export const _finally = (before, after) => (action) => {
   })();
 };
 
-export const on_cancel = (x, y) => (action) => {
+export const on_cancel = (task, x, y) => (action) => {
   let terminated = false;
+
+  const onSuccess = (value) => {
+    if (!terminated) {
+      action.onTerminate = null;
+      // Tail recursive
+      x(value)(action);
+    }
+  };
 
   const onCancel = () => {
     // TODO maybe this should execute even if it was terminated ?
     if (!terminated) {
       action.onTerminate = null;
-
-      // TODO is this correct ?
+      // Tail recursive
       y(action);
-
-      /*const t2 = run(y, action.success, action.error, action.cancel);
-
-      // TODO should this terminate ?
-      action.onTerminate = () => {
-        t2.terminate();
-      };*/
     }
   };
 
   // TODO slightly inefficient
-  // TODO is this needed to prevent a memory leak of `t1` ?
+  // TODO is this needed to prevent a memory leak of `t` ?
   (function () {
-    const t1 = run(x, action.success, action.error, onCancel);
+    const t = run(task, onSuccess, action.error, onCancel);
 
     action.onTerminate = () => {
       terminated = true;
-      t1.terminate();
+      t.terminate();
     };
   })();
 };
@@ -434,18 +438,6 @@ export const execute = (f) => (action) => {
   } catch (e) {
     action.error(e);
   }
-};
-
-// This can be implemented entirely with bind + wrap,
-// but it's more efficient to implement it with the FFI
-export const ignore = (task) => (action) => {
-  const t = run(task, (_) => {
-    action.success(undefined);
-  }, action.error, action.cancel);
-
-  action.onTerminate = () => {
-    t.terminate();
-  };
 };
 
 export const thread = (task) => (action) => {

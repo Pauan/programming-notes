@@ -46,9 +46,9 @@
                  (-> (Task A)
                      (Task Void))))
   (w/stream task)
-    (on-cancel
-      (ignore task)
-      (wrap (void))))
+    (on-cancel task
+      (-> _ void)
+      void))
 
 (FUNCTION
   (w/stream-close! :: (FORALL A B
@@ -124,12 +124,10 @@
   (stream/foldl! init in f)
     (LOOP next
         | old = init
-      # TODO doesn't this generate a huge chain of `on-cancel`s ?
       (on-cancel
-        # TODO even though this is tail-recursive, does it generate a huge chain of `_bind` ?
         (DO value = (pull! in)
-            new = (f old value)
-            (next new))
+            (f old value))
+        next
         (wrap old))))
 
 (FUNCTION

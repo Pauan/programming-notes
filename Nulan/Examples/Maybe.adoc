@@ -1,0 +1,27 @@
+(TYPE (Maybe A)
+  (*something A)
+  (*nothing))
+
+(FUNCTION
+  "If the first argument is `(*something foo)`, then `foo` is returned.
+
+   If the first argument is `(*nothing)`, then the second argument is
+   returned.
+
+   ''''
+
+   This is useful for unwrapping a `Maybe`:
+
+   [source,nulan]
+   ----
+   # Returns the value for foo, or 0 if foo doesn't have a value
+   (default foo 0)
+   ----"
+  (default :: (FORALL A
+                (-> (Maybe A) A A)))
+  (default x y)
+    (MATCH x
+      (*something value)
+        value
+      (*nothing)
+        y))

@@ -84,7 +84,7 @@ class StreamBase {
 
       action.onTerminate = () => {
         // TODO is it possible for `this._pullers` to be `null` ?
-        remove_array(this._pullers, info);
+        array_remove(this._pullers, info);
       };
     }
   }
@@ -103,7 +103,7 @@ class StreamBase {
 
       action.onTerminate = () => {
         // TODO is it possible for `this._pullers` to be `null` ?
-        remove_array(this._pullers, info);
+        array_remove(this._pullers, info);
       };
     }
   }

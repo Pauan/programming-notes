@@ -314,29 +314,29 @@ var check_length = function check_length(i) {
   }
 };
 
-var closed_peek = function closed_peek(task) {
+var closed_peek = function closed_peek(action) {
   if (this._buffer.length) {
-    task.success(this._buffer.peek());
+    action.success(this._buffer.peek());
   } else {
-    task.cancel();
+    action.cancel();
   }
 };
 
-var closed_pull = function closed_pull(task) {
+var closed_pull = function closed_pull(action) {
   if (this._buffer.length) {
-    task.success(this._buffer.pull());
+    action.success(this._buffer.pull());
   } else {
-    task.cancel();
+    action.cancel();
   }
 };
 
-var closed_push = function closed_push(task, value) {
-  task.cancel();
+var closed_push = function closed_push(action, value) {
+  action.cancel();
 };
 
-var closed_close = function closed_close(task) {
+var closed_close = function closed_close(action) {
   // TODO is this correct ? maybe it should simply do nothing if you close a Stream multiple times
-  task.error(new Error("Cannot close: stream is already closed"));
+  action.error(new Error("Cannot close: stream is already closed"));
 };
 
 var StreamBase = (function () {
@@ -360,12 +360,12 @@ var StreamBase = (function () {
       // This cancels any pending peek/pull
       // This only happens if the buffer is empty
       for (var i = 0; i < a.length; ++i) {
-        a[i].task.cancel();
+        a[i].action.cancel();
       }
     }
   }, {
     key: "close",
-    value: function close(task) {
+    value: function close(action) {
       this.peek = closed_peek;
       this.pull = closed_pull;
       this.push = closed_push;
@@ -375,57 +375,57 @@ var StreamBase = (function () {
       this.cleanup();
 
       // TODO should this cancel ?
-      task.success(undefined);
+      action.success(undefined);
     }
   }, {
     key: "peek",
-    value: function peek(task) {
+    value: function peek(action) {
       var _this = this;
 
       if (this._buffer.length) {
-        task.success(this._buffer.peek());
+        action.success(this._buffer.peek());
       } else {
         (function () {
           var info = {
             push: true,
-            task: task
+            action: action
           };
 
           _this._pullers.push(info);
 
-          task.onAbort = function () {
+          action.onTerminate = function () {
             // TODO is it possible for `this._pullers` to be `null` ?
-            remove_array(_this._pullers, info);
+            _Queue$array_remove.array_remove(_this._pullers, info);
           };
         })();
       }
     }
   }, {
     key: "pull",
-    value: function pull(task) {
+    value: function pull(action) {
       var _this2 = this;
 
       if (this._buffer.length) {
-        task.success(this._buffer.pull());
+        action.success(this._buffer.pull());
       } else {
         (function () {
           var info = {
             push: false,
-            task: task
+            action: action
           };
 
           _this2._pullers.push(info);
 
-          task.onAbort = function () {
+          action.onTerminate = function () {
             // TODO is it possible for `this._pullers` to be `null` ?
-            remove_array(_this2._pullers, info);
+            _Queue$array_remove.array_remove(_this2._pullers, info);
           };
         })();
       }
     }
   }, {
     key: "push",
-    value: function push(task, value) {
+    value: function push(action, value) {
       // If there is a pending pull
       if (this._pullers.length) {
         var f = this._pullers.shift();
@@ -434,17 +434,17 @@ var StreamBase = (function () {
           this._buffer.push(value);
         }
 
-        f.task.success(value);
-        task.success(undefined);
+        f.action.success(value);
+        action.success(undefined);
 
         // If there is room in the buffer
       } else if (this._buffer.length < this._limit) {
         this._buffer.push(value);
-        task.success(undefined);
+        action.success(undefined);
 
         // Buffer is full
       } else {
-        this.full(task, value);
+        this.full(action, value);
       }
     }
   }]);
@@ -473,12 +473,12 @@ var StreamFixed = (function (_StreamBase) {
 
       // TODO is it faster to use var or let ?
       for (var i = 0; i < a.length; ++i) {
-        a[i].task.cancel();
+        a[i].action.cancel();
       }
     }
   }, {
     key: "pull",
-    value: function pull(task) {
+    value: function pull(action) {
       var _this3 = this;
 
       // If there is stuff in the buffer
@@ -489,22 +489,22 @@ var StreamFixed = (function (_StreamBase) {
         if (this._pushers.length) {
           var f = this._pushers.shift();
           this._buffer.push(f.value);
-          f.task.success(undefined);
+          f.action.success(undefined);
         }
 
-        task.success(value);
+        action.success(value);
 
         // Buffer is empty, wait for push
       } else {
         (function () {
           var info = {
             push: false,
-            task: task
+            action: action
           };
 
           _this3._pullers.push(info);
 
-          task.onAbort = function () {
+          action.onTerminate = function () {
             // TODO is it possible for `this._pullers` to be `null` ?
             _Queue$array_remove.array_remove(_this3._pullers, info);
           };
@@ -513,17 +513,17 @@ var StreamFixed = (function (_StreamBase) {
     }
   }, {
     key: "full",
-    value: function full(task, value) {
+    value: function full(action, value) {
       var _this4 = this;
 
       var info = {
         value: value,
-        task: task
+        action: action
       };
 
       this._pushers.push(info);
 
-      task.onAbort = function () {
+      action.onTerminate = function () {
         // TODO is it possible for `this._pushers` to be `null` ?
         _Queue$array_remove.array_remove(_this4._pushers, info);
       };
@@ -546,11 +546,11 @@ var StreamSliding = (function (_StreamBase2) {
 
   _createClass(StreamSliding, [{
     key: "full",
-    value: function full(task, value) {
+    value: function full(action, value) {
       // TODO more efficient function for this
       this._buffer.pull();
       this._buffer.push(value);
-      task.success(undefined);
+      action.success(undefined);
     }
   }]);
 
@@ -570,8 +570,8 @@ var StreamDropping = (function (_StreamBase3) {
 
   _createClass(StreamDropping, [{
     key: "full",
-    value: function full(task, value) {
-      task.success(undefined);
+    value: function full(action, value) {
+      action.success(undefined);
     }
   }]);
 
@@ -579,56 +579,56 @@ var StreamDropping = (function (_StreamBase3) {
 })(StreamBase);
 
 var stream_fixed = function stream_fixed(i) {
-  return function (task) {
+  return function (action) {
     if (check_length(i)) {
-      task.success(new StreamFixed(i));
+      action.success(new StreamFixed(i));
     }
   };
 };
 
 exports.stream_fixed = stream_fixed;
 var stream_sliding = function stream_sliding(i) {
-  return function (task) {
+  return function (action) {
     if (check_length(i)) {
-      task.success(new StreamSliding(i));
+      action.success(new StreamSliding(i));
     }
   };
 };
 
 exports.stream_sliding = stream_sliding;
 var stream_dropping = function stream_dropping(i) {
-  return function (task) {
+  return function (action) {
     if (check_length(i)) {
-      task.success(new StreamDropping(i));
+      action.success(new StreamDropping(i));
     }
   };
 };
 
 exports.stream_dropping = stream_dropping;
 var peek = function peek(stream) {
-  return function (task) {
-    stream.peek(task);
+  return function (action) {
+    stream.peek(action);
   };
 };
 
 exports.peek = peek;
 var pull = function pull(stream) {
-  return function (task) {
-    stream.pull(task);
+  return function (action) {
+    stream.pull(action);
   };
 };
 
 exports.pull = pull;
 var push = function push(stream, value) {
-  return function (task) {
-    stream.push(task, value);
+  return function (action) {
+    stream.push(action, value);
   };
 };
 
 exports.push = push;
 var close = function close(stream) {
-  return function (task) {
-    stream.close(task);
+  return function (action) {
+    stream.close(action);
   };
 };
 exports.close = close;
@@ -645,31 +645,14 @@ Object.defineProperty(exports, "__esModule", {
   value: true
 });
 
-var _Queue$array_remove$nextTick = require("./Util");
+var _array_remove$async$error_stack$fatal_error$print_error = require("./Util");
 
-var error_stack = function error_stack(e) {
-  if (e.stack != null) {
-    return e.stack;
-  } else {
-    return e;
-  }
-};
-
-var print_fatal = function print_fatal(s) {
-  // TODO code duplication with print_error
-  console.error("\n" + "=".repeat(50) + "\n" + s + "\n" + "=".repeat(50));
-};
-
-var print_finished_error = function print_finished_error(e) {
-  print_fatal("AN ERROR OCCURRED AFTER THE TASK WAS FINISHED!\n\n" + error_stack(e));
-};
-
-//const promise = Promise.resolve();
+var RUNNING_TASKS = 0;
 
 // For Node.js only
 if (typeof process === "object" && typeof process.on === "function") {
   process.on("uncaughtException", function (e) {
-    print_fatal("AN UNCAUGHT ERROR OCCURRED!\n\n" + error_stack(e));
+    _array_remove$async$error_stack$fatal_error$print_error.fatal_error("AN UNCAUGHT ERROR OCCURRED!\n\n" + _array_remove$async$error_stack$fatal_error$print_error.error_stack(e));
     process.exit(1);
   });
 
@@ -681,230 +664,113 @@ if (typeof process === "object" && typeof process.on === "function") {
   process.on("exit", function () {
     // This should never happen, it's just a sanity check, just in case
     if (RUNNING_TASKS !== 0) {
-      print_fatal("NODE.JS IS EXITING, BUT THERE ARE STILL " + RUNNING_TASKS + " TASKS PENDING!");
+      _array_remove$async$error_stack$fatal_error$print_error.fatal_error("NODE.JS IS EXITING, BUT THERE ARE STILL " + RUNNING_TASKS + " TASKS PENDING!");
     }
   });
 }
 
-var task_queue = new _Queue$array_remove$nextTick.Queue();
+// TODO it shouldn't allow for calling cleanup_success twice
+var cleanup_success = function cleanup_success(value) {};
 
-// Arbitrary number, just so long as it's big enough for normal use cases
-var TASK_QUEUE_MAX_CAPACITY = 1024;
+var cleanup_success_error = function cleanup_success_error(value) {
+  // TODO pretty printing for value
+  _array_remove$async$error_stack$fatal_error$print_error.fatal_error("INVALID SUCCESS!\n\n" + value);
+};
 
-var TASK_QUEUE_FLUSHING = false;
+var cleanup_error = function cleanup_error(e) {
+  _array_remove$async$error_stack$fatal_error$print_error.fatal_error("INVALID ERROR!\n\n" + _array_remove$async$error_stack$fatal_error$print_error.error_stack(e));
+};
 
-// Macrotask queue scheduler, similar to setImmediate
-var task_queue_flush = function task_queue_flush() {
-  if (!TASK_QUEUE_FLUSHING) {
-    (function () {
-      TASK_QUEUE_FLUSHING = true;
+var cleanup_cancel = function cleanup_cancel() {
+  _array_remove$async$error_stack$fatal_error$print_error.fatal_error("INVALID CANCEL!");
+};
 
-      var loop = (function (_loop) {
-        function loop() {
-          return _loop.apply(this, arguments);
-        }
+var cleanup_terminate = function cleanup_terminate() {
+  return false;
+};
 
-        loop.toString = function () {
-          return _loop.toString();
-        };
+var cleanup_terminate_error = function cleanup_terminate_error() {
+  _array_remove$async$error_stack$fatal_error$print_error.fatal_error("CANNOT TERMINATE THE SAME ACTION TWICE!");
+  return false;
+};
 
-        return loop;
-      })(function () {
-        var pending = task_queue.length;
+var cleanup = function cleanup(action, success, terminate) {
+  action.success = success;
+  action.error = cleanup_error;
+  action.cancel = cleanup_cancel;
+  action.terminate = terminate;
+  action.onTerminate = null;
+};
 
-        // Process all the tasks that were queued up, but if more tasks are queued, they are not processed
-        do {
-          // Pull the task out of the queue and then call it
-          task_queue.pull()();
-          --pending;
-        } while (pending !== 0);
+var run = function run(task, onSuccess, onError, onCancel) {
+  ++RUNNING_TASKS;
 
-        // We're done processing all of the tasks
-        if (task_queue.length === 0) {
-          TASK_QUEUE_FLUSHING = false;
+  var action = {
+    onTerminate: null,
 
-          // Process any remaining tasks
-        } else {
-          // TODO this is necessary in order to abort infinite loops, but is there a better way ?
-          _Queue$array_remove$nextTick.nextTick(loop);
-        }
+    success: function success(value) {
+      // It's okay to call terminate after success
+      cleanup(action, cleanup_success_error, cleanup_terminate);
+
+      _array_remove$async$error_stack$fatal_error$print_error.async(function () {
+        onSuccess(value);
+        --RUNNING_TASKS;
       });
+    },
 
-      // TODO this is necessary in order to abort infinite loops, but is there a better way ?
-      _Queue$array_remove$nextTick.nextTick(loop);
-    })();
-  }
+    error: function error(e) {
+      // It's okay to call terminate after error
+      cleanup(action, cleanup_success_error, cleanup_terminate);
+
+      _array_remove$async$error_stack$fatal_error$print_error.async(function () {
+        onError(e);
+        --RUNNING_TASKS;
+      });
+    },
+
+    cancel: function cancel() {
+      // It's okay to call terminate after cancel
+      cleanup(action, cleanup_success_error, cleanup_terminate);
+
+      _array_remove$async$error_stack$fatal_error$print_error.async(function () {
+        onCancel();
+        --RUNNING_TASKS;
+      });
+    },
+
+    terminate: function terminate() {
+      var f = action.onTerminate;
+
+      // It's okay to call success after terminate
+      cleanup(action, cleanup_success, cleanup_terminate_error);
+
+      // Not every action supports termination
+      if (f !== null) {
+        // We can't use `async` (see e.g. _finally, _bind, etc.)
+        f();
+      }
+
+      --RUNNING_TASKS;
+      return true;
+    }
+  };
+
+  task(action);
+
+  return action;
 };
 
-// TODO is this a good idea ? it's useful for stuff like Streams, but do we want *all* Tasks to behave this way ?
-// TODO use the asap polyfill ?
-var async = function async(f) {
-  //return f();
-
-  //promise["then"](f);
-
-  //nextTick(f);
-
-  task_queue.push(f);
-
-  // Warn if the task queue gets too big
-  if (task_queue.length > TASK_QUEUE_MAX_CAPACITY) {
-    console.warn("Task queue has " + task_queue.length + " items, which is greater than the max capacity of " + TASK_QUEUE_MAX_CAPACITY);
-  }
-
-  _Queue$array_remove$nextTick.nextTick(task_queue_flush);
-
-  //return f();
-  //process.nextTick(f);
-  //setImmediate(f);
-  //setTimeout(f, 0);
-};
-
-exports.async = async;
-var RUNNING_TASKS = 0;
-
+exports.run = run;
 // TODO is using `| 0` a good idea? is there a better way to get Chrome to treat them as a small uint ?
 var PENDING = 0 | 0;
 var SUCCEEDED = 1 | 0;
 var ERRORED = 2 | 0;
 var CANCELLED = 3 | 0;
-var ABORTED = 4 | 0;
-
-var Task = (function () {
-  function Task(onSuccess, onError, onCancel) {
-    _classCallCheck(this, Task);
-
-    // TODO is a simple boolean `_pending` sufficient ?
-    // TODO is it faster or slower to use (`_pending` and `if`) or (`_state` and `switch`) ?
-    this._state = PENDING;
-
-    // When a task's state is no longer pending, exactly 1 of these 4
-    // callbacks will be called, and it will only be called once.
-    this._onSuccess = onSuccess;
-    this._onError = onError;
-    this._onCancel = onCancel;
-    this.onAbort = null;
-
-    ++RUNNING_TASKS;
-  }
-
-  _createClass(Task, [{
-    key: "success",
-    value: function success(value) {
-      var _this = this;
-
-      if (this._state === PENDING) {
-        (function () {
-          var f = _this._onSuccess;
-
-          _this._state = SUCCEEDED;
-          _this._onSuccess = null;
-          _this._onError = null;
-          _this._onCancel = null;
-          _this.onAbort = null; // TODO what if somebody sets onAbort after the Task is succeeded ?
-
-          async(function () {
-            f(value);
-            --RUNNING_TASKS; // TODO is this correct ?
-          });
-
-          // It's okay for a Task to succeed after an abort
-          // TODO we should only allow `success` to be called once, even after an abort
-        })();
-      } else if (this._state !== ABORTED) {
-        // TODO if the task is aborted, should it *not* print an error message ?
-        // TODO pretty printing for value
-        print_fatal("A SUCCESS OCCURRED AFTER THE TASK WAS FINISHED!\n\n" + value);
-      }
-    }
-  }, {
-    key: "error",
-    value: function error(e) {
-      var _this2 = this;
-
-      if (this._state === PENDING) {
-        (function () {
-          var f = _this2._onError;
-
-          _this2._state = ERRORED;
-          _this2._onSuccess = null;
-          _this2._onError = null;
-          _this2._onCancel = null;
-          _this2.onAbort = null; // TODO what if somebody sets onAbort after the Task is errored ?
-
-          async(function () {
-            f(e);
-            --RUNNING_TASKS; // TODO is this correct ?
-          });
-        })();
-      } else {
-        // This is to make sure that errors are *never* silently ignored
-        print_finished_error(e);
-      }
-    }
-  }, {
-    key: "cancel",
-    value: function cancel() {
-      var _this3 = this;
-
-      if (this._state === PENDING) {
-        (function () {
-          var f = _this3._onCancel;
-
-          _this3._state = CANCELLED;
-          _this3._onSuccess = null;
-          _this3._onError = null;
-          _this3._onCancel = null;
-          _this3.onAbort = null; // TODO what if somebody sets onAbort after the Task is cancelled ?
-
-          async(function () {
-            f();
-            --RUNNING_TASKS; // TODO is this correct ?
-          });
-
-          // TODO should it be okay for a task to cancel after an abort ?
-        })();
-      } else {
-        print_fatal("A CANCEL OCCURRED AFTER THE TASK WAS FINISHED!");
-      }
-    }
-  }, {
-    key: "abort",
-    value: function abort() {
-      if (this._state === PENDING) {
-        var f = this.onAbort;
-
-        this._state = ABORTED;
-        this._onSuccess = null;
-        this._onError = null;
-        this._onCancel = null;
-        this.onAbort = null; // TODO what if somebody sets onAbort after the Task is aborted ?
-
-        // Some tasks can't be aborted
-        if (f !== null) {
-          // We cannot use asap for this, or it will potentially cause problems (e.g. _bind and _finally)
-          // TODO we really want to be able to use asap for this, though, because otherwise we blow out the call stack
-          f();
-        }
-
-        --RUNNING_TASKS; // TODO is this correct ?
-        return true;
-      } else if (this._state === ABORTED) {
-        // TODO maybe use this.error instead ?
-        print_fatal("YOU CANNOT ABORT THE SAME TASK TWICE!");
-        return false;
-      } else {
-        return false;
-      }
-    }
-  }]);
-
-  return Task;
-})();
+var TERMINATED = 4 | 0;
 
 var Thread = (function () {
   function Thread(task) {
-    var _this4 = this;
+    var _this = this;
 
     _classCallCheck(this, Thread);
 
@@ -912,14 +778,15 @@ var Thread = (function () {
     this._value = null;
     this._listeners = [];
 
-    this._task = run(task, function (value) {
-      if (_this4._state === PENDING) {
-        var _a = _this4._listeners;
+    // This is to make sure that Node.js doesn't exit until all the Tasks are done
+    this._action = run(_finally(task, block()), function (value) {
+      if (_this._state === PENDING) {
+        var _a = _this._listeners;
 
-        _this4._state = SUCCEEDED;
-        _this4._value = value;
-        _this4._listeners = null;
-        _this4._task = null;
+        _this._state = SUCCEEDED;
+        _this._value = value;
+        _this._listeners = null;
+        _this._action = null;
 
         // TODO this can be made a bit faster
         _a.forEach(function (x) {
@@ -927,13 +794,13 @@ var Thread = (function () {
         });
       }
     }, function (e) {
-      if (_this4._state === PENDING) {
-        _this4._cancel(ERRORED);
-        print_error(e);
+      if (_this._state === PENDING) {
+        _this._cancel(ERRORED);
+        _array_remove$async$error_stack$fatal_error$print_error.print_error(e);
       }
     }, function () {
-      if (_this4._state === PENDING) {
-        _this4._cancel(CANCELLED);
+      if (_this._state === PENDING) {
+        _this._cancel(CANCELLED);
       }
     });
   }
@@ -946,7 +813,7 @@ var Thread = (function () {
       // TODO verify that _value is null ?
       this._state = new_state;
       this._listeners = null;
-      this._task = null;
+      this._action = null;
 
       // TODO this can be made a bit faster
       a.forEach(function (x) {
@@ -955,43 +822,43 @@ var Thread = (function () {
     }
   }, {
     key: "wait",
-    value: function wait(task) {
-      var _this5 = this;
+    value: function wait(action) {
+      var _this2 = this;
 
       switch (this._state) {
         case PENDING:
-          this._listeners.push(task);
+          this._listeners.push(action);
 
           // TODO test this
-          task.onAbort = function () {
-            remove_array(_this5._listeners, task);
+          action.onTerminate = function () {
+            _array_remove$async$error_stack$fatal_error$print_error.array_remove(_this2._listeners, action);
           };
           break;
 
-        case SUCCESS:
-          task.success(this._value);
+        case SUCCEEDED:
+          action.success(this._value);
           break;
 
         // TODO is this correct ?
-        case CANCELLED:
         case ERRORED:
-        case ABORTED:
-          task.cancel();
+        case CANCELLED:
+        case TERMINATED:
+          action.cancel();
           break;
       }
     }
   }, {
     key: "kill",
-    value: function kill(task) {
+    value: function kill(action) {
       switch (this._state) {
         case PENDING:
-          var t = this._task;
+          var t = this._action;
           var a = this._listeners;
 
           // TODO verify that _value is null ?
-          this._state = ABORTED;
+          this._state = TERMINATED;
           this._listeners = null;
-          this._task = null;
+          this._action = null;
 
           // TODO this can be made a bit faster
           a.forEach(function (x) {
@@ -999,19 +866,19 @@ var Thread = (function () {
           });
 
           // TODO should this be before or after cancelling the listeners ?
-          t.abort();
-          task.success(undefined);
+          t.terminate();
+          action.success(undefined);
           break;
 
         // TODO is this correct ?
-        case SUCCESS:
+        case SUCCEEDED:
         case ERRORED:
         case CANCELLED:
-          task.success(undefined);
+          action.success(undefined);
           break;
 
-        case ABORTED:
-          task.error(new Error("Cannot kill thread: thread is already killed"));
+        case TERMINATED:
+          action.error(new Error("Cannot kill thread: thread is already killed"));
           break;
       }
     }
@@ -1023,44 +890,28 @@ var Thread = (function () {
 var noop = function noop() {};
 
 exports.noop = noop;
-// There's no standard way to cancel/abort a Promise
+// There's no standard way to cancel/terminate a Promise
 var Task_from_Promise = function Task_from_Promise(f) {
-  return function (task) {
-    f().then(function (x) {
-      task.success(x);
-    }, function (e) {
-      task.error(e);
-    });
+  return function (action) {
+    f().then(action.success, action.error);
   };
 };
 
 exports.Task_from_Promise = Task_from_Promise;
-// TODO how to handle the task/promise being aborted ?
-var Promise_from_Task = function Promise_from_Task(t) {
+// TODO how to handle the task/promise being terminated ?
+var Promise_from_Task = function Promise_from_Task(task) {
   return new Promise(function (resolve, reject) {
     // TODO is cancellation correctly handled ?
-    run(t, resolve, reject, reject);
+    run(task, resolve, reject, reject);
   });
 };
 
 exports.Promise_from_Task = Promise_from_Task;
-var print_error = function print_error(e) {
-  console.error(error_stack(e));
-};
-
-exports.print_error = print_error;
-var run = function run(task, onSuccess, onError, onCancel) {
-  var t = new Task(onSuccess, onError, onCancel);
-  // TODO maybe use try/catch here ?
-  task(t);
-  return t;
-};
-
-exports.run = run;
 // TODO does this work properly in all platforms ?
 var MAX_TIMER = Math.pow(2, 31) - 1;
 
 // TODO test this
+// TODO it creates a new timer for each Thread, it would be better to use a single timer
 var block = function block() {
   // This is necessary to prevent Node.js from exiting before the tasks are complete
   // TODO is there a more efficient way to do this ?
@@ -1069,30 +920,29 @@ var block = function block() {
   // TODO test this
   var timer = setInterval(noop, MAX_TIMER);
 
-  return function (task) {
+  return function (action) {
     clearInterval(timer);
-    task.success(undefined);
+    action.success(undefined);
   };
 };
 
 exports.block = block;
 var run_root = function run_root(f) {
-  // TODO maybe use `execute`, rather than `try/catch` ?
-  // TODO is it necessary to use try/catch ?
+  // TODO I'd like to use `execute`, but I can't, because `f` returns a `Task`, so I'd have to double-run it
   try {
     // TODO is it inefficient to use _finally here ?
-    run(_finally(f(), block()), noop, print_error, noop);
+    run(_finally(f(), block()), noop, _array_remove$async$error_stack$fatal_error$print_error.print_error, noop);
   } catch (e) {
-    print_error(e);
+    _array_remove$async$error_stack$fatal_error$print_error.print_error(e);
   }
 };
 
 exports.run_root = run_root;
-// This can be implemented purely with `execute`,
+// This can be implemented entirely with `execute`,
 // but it's faster to implement it like this
 var success = function success(x) {
-  return function (task) {
-    task.success(x);
+  return function (action) {
+    action.success(x);
   };
 };
 
@@ -1100,246 +950,291 @@ exports.success = success;
 var error = function error(s) {
   // TODO better stack traces
   var e = new Error(s);
-  return function (task) {
-    task.error(e);
+  return function (action) {
+    action.error(e);
   };
 };
 
 exports.error = error;
 var cancel = function cancel() {
-  return function (task) {
-    task.cancel();
+  return function (action) {
+    action.cancel();
   };
 };
 
 exports.cancel = cancel;
-// TODO what if the task is aborted ?
+// TODO what if the action is terminated ?
 var never = function never() {
-  return function (task) {};
+  return function (action) {};
 };
 
 exports.never = never;
-var _bind = function _bind(x, f) {
-  return function (task) {
-    var aborted = false;
+var _bind = function _bind(task, f) {
+  return function (action) {
+    // TODO is this necessary ?
+    var terminated = false;
 
-    var success = function success(value) {
-      task.success(value);
-    };
+    var onSuccess = function onSuccess(value) {
+      if (!terminated) {
+        action.onTerminate = null;
 
-    var error = function error(e) {
-      task.error(e);
-    };
+        // Runs the task in a tail-recursive manner, so that it consumes a
+        // constant amount of memory, even if it's an infinite loop
+        f(value)(action);
 
-    var cancel = function cancel() {
-      task.cancel();
-    };
-
-    var t1 = run(x, function (value) {
-      if (!aborted) {
-        (function () {
-          var t2 = run(f(value), success, error, cancel);
-
-          // TODO is it even possible for this to occur ?
-          task.onAbort = function () {
-            t2.abort();
-          };
-        })();
+        /*const a2 = run(f(value), action.success, action.error, action.cancel);
+         // TODO is it even possible for this to occur ?
+        action.onTerminate = () => {
+          a2.terminate();
+        };*/
       }
-    }, error, cancel);
-
-    task.onAbort = function () {
-      aborted = true;
-      t1.abort();
     };
+
+    // TODO slightly inefficient
+    // TODO is this needed to prevent a memory leak of `a1` ?
+    (function () {
+      var a1 = run(task, onSuccess, action.error, action.cancel);
+
+      action.onTerminate = function () {
+        terminated = true;
+        a1.terminate();
+      };
+    })();
   };
 };
 
 exports._bind = _bind;
 // TODO test this
 var with_resource = function with_resource(before, during, after) {
-  return function (task) {
-    var aborted = false;
+  return function (action) {
+    var terminated = false;
 
-    var success = function success(value) {
-      task.success(value);
-    };
-
-    var error = function error(e) {
-      task.error(e);
-    };
-
-    var cancel = function cancel() {
-      task.cancel();
-    };
-
-    // This is always run, even if it's aborted
+    // This is always run, even if it's terminated
     run(before, function (value) {
-      if (aborted) {
-        // This is always run, even if it's aborted
-        run(after(value), success, error, cancel);
-      } else {
-        // There's no need to create a new task for this, so we just use the existing one
-        _finally(during(value), after(value))(task);
-      }
-    }, error, cancel);
+      action.onTerminate = null;
 
-    task.onAbort = function () {
-      aborted = true;
+      if (terminated) {
+        // This is always run, even if it's terminated
+        // TODO maybe this should use `after(value)(action)` instead ?
+        run(after(value), noop, action.error, action.cancel);
+      } else {
+        // There's no need to create a new action for this, so we just use the existing one
+        _finally(during(value), after(value))(action);
+      }
+    }, action.error, action.cancel);
+
+    action.onTerminate = function () {
+      terminated = true;
     };
   };
 };
 
 exports.with_resource = with_resource;
 var _finally = function _finally(before, after) {
-  return function (task) {
-    var error = function error(e) {
-      task.error(e);
-    };
+  return function (action) {
+    var onSuccess = function onSuccess(value) {
+      // TODO is this necessary to prevent a memory leak ?
+      action.onTerminate = null;
 
-    var cancel = function cancel() {
-      task.cancel();
-    };
-
-    var t = run(before, function (value) {
-      // This task is run no matter what, even if it is aborted
+      // This task is run no matter what, even if it is terminated
       run(after, function (_) {
-        task.success(value);
-      }, error, cancel);
-    }, function (e) {
+        action.success(value);
+      }, action.error, action.cancel);
+    };
+
+    var onError = function onError(e) {
+      // TODO is this necessary to prevent a memory leak ?
+      action.onTerminate = null;
+
       // Errors have precedence over cancellations
       var propagate = function propagate() {
-        task.error(e);
+        action.error(e);
       };
 
-      // This task is run no matter what, even if it is aborted
-      run(after, propagate, error, propagate);
-    }, function () {
-      // This task is run no matter what, even if it is aborted
-      run(after, cancel, error, cancel);
-    });
-
-    task.onAbort = function () {
-      if (t.abort()) {
-        // This task is run no matter what, even if it is aborted
-        // There's nothing to return, so we use `noop`
-        run(after, noop, error, cancel);
-      }
+      // This task is run no matter what, even if it is terminated
+      run(after, propagate, action.error, propagate);
     };
+
+    var onCancel = function onCancel() {
+      // TODO is this necessary to prevent a memory leak ?
+      action.onTerminate = null;
+
+      // This task is run no matter what, even if it is terminated
+      run(after, action.cancel, action.error, action.cancel);
+    };
+
+    // TODO slightly inefficient
+    // TODO is this needed to prevent a memory leak of `t` ?
+    (function () {
+      var t = run(before, onSuccess, onError, onCancel);
+
+      action.onTerminate = function () {
+        if (t.terminate()) {
+          // This task is run no matter what, even if it is terminated
+          // There's nothing to return, so we use `noop`
+          // TODO can this be implemented as `after(action)` ?
+          run(after, noop, action.error, action.cancel);
+        }
+      };
+    })();
   };
 };
 
 exports._finally = _finally;
 var on_cancel = function on_cancel(x, y) {
-  return function (task) {
-    var aborted = false;
+  return function (action) {
+    var terminated = false;
 
-    var success = function success(value) {
-      task.success(value);
-    };
+    var onCancel = function onCancel() {
+      // TODO maybe this should execute even if it was terminated ?
+      if (!terminated) {
+        action.onTerminate = null;
 
-    var error = function error(e) {
-      task.error(e);
-    };
+        // TODO is this correct ?
+        y(action);
 
-    var t1 = run(x, success, error, function () {
-      // TODO maybe this should execute even if it was aborted ?
-      if (!aborted) {
-        (function () {
-          var t2 = run(y, success, error, function () {
-            task.cancel();
-          });
-
-          // TODO should this abort ?
-          task.onAbort = function () {
-            t2.abort();
-          };
-        })();
+        /*const t2 = run(y, action.success, action.error, action.cancel);
+         // TODO should this terminate ?
+        action.onTerminate = () => {
+          t2.terminate();
+        };*/
       }
-    });
-
-    task.onAbort = function () {
-      aborted = true;
-      t1.abort();
     };
+
+    // TODO slightly inefficient
+    // TODO is this needed to prevent a memory leak of `t1` ?
+    (function () {
+      var t1 = run(x, action.success, action.error, onCancel);
+
+      action.onTerminate = function () {
+        terminated = true;
+        t1.terminate();
+      };
+    })();
   };
 };
 
 exports.on_cancel = on_cancel;
 var execute = function execute(f) {
-  return function (task) {
+  return function (action) {
     try {
-      task.success(f());
+      action.success(f());
     } catch (e) {
-      task.error(e);
+      action.error(e);
     }
   };
 };
 
 exports.execute = execute;
-// This can be implemented purely with bind + wrap,
+// This can be implemented entirely with bind + wrap,
 // but it's more efficient to implement it with the FFI
-var ignore = function ignore(x) {
-  return function (task) {
-    var t = run(x, function (_) {
-      task.success(undefined);
-    }, function (e) {
-      task.error(e);
-    }, function () {
-      task.cancel();
-    });
+var ignore = function ignore(task) {
+  return function (action) {
+    var t = run(task, function (_) {
+      action.success(undefined);
+    }, action.error, action.cancel);
 
-    task.onAbort = function () {
-      t.abort();
+    action.onTerminate = function () {
+      t.terminate();
     };
   };
 };
 
 exports.ignore = ignore;
-var thread = function thread(x) {
-  return function (task) {
-    task.success(new Thread(x));
+var thread = function thread(task) {
+  return function (action) {
+    action.success(new Thread(task));
   };
 };
 
 exports.thread = thread;
-var thread_wait = function thread_wait(x) {
-  return function (task) {
-    x.wait(task);
+var thread_wait = function thread_wait(thread) {
+  return function (action) {
+    thread.wait(action);
   };
 };
 
 exports.thread_wait = thread_wait;
-var thread_kill = function thread_kill(x) {
-  return function (task) {
-    x.kill(task);
+var thread_kill = function thread_kill(thread) {
+  return function (action) {
+    thread.kill(action);
   };
 };
 
 exports.thread_kill = thread_kill;
-var abortAll = function abortAll(tasks) {
+var terminateAll = function terminateAll(actions) {
   // TODO is it faster to use a var or a let ?
-  for (var i = 0; i < tasks.length; ++i) {
-    tasks[i].abort();
+  for (var i = 0; i < actions.length; ++i) {
+    actions[i].terminate();
   }
 };
 
-exports.abortAll = abortAll;
+exports.terminateAll = terminateAll;
 // TODO verify that this works correctly in all situations
-var concurrent = function concurrent(a) {
-  return function (task) {
+// This can be implemented entirely in Nulan, but it's much more efficient to implement it in here
+var sequential = function sequential(a) {
+  return function (action) {
     var out = new Array(a.length);
 
-    var tasks = [];
+    var terminated = false;
+
+    var loop = (function (_loop) {
+      function loop(_x) {
+        return _loop.apply(this, arguments);
+      }
+
+      loop.toString = function () {
+        return _loop.toString();
+      };
+
+      return loop;
+    })(function (i) {
+      if (i < a.length) {
+        (function () {
+          var onSuccess = function onSuccess(value) {
+            if (!terminated) {
+              action.onTerminate = null;
+              out[i] = value;
+              loop(i + 1);
+            }
+          };
+
+          // TODO slightly inefficient
+          // TODO is this needed to prevent a memory leak of `t` ?
+          (function () {
+            var t = run(a[i], onSuccess, action.error, action.cancel);
+
+            action.onTerminate = function () {
+              terminated = true;
+              t.terminate();
+            };
+          })();
+        })();
+      } else {
+        action.success(out);
+      }
+    });
+
+    loop(0);
+  };
+};
+
+exports.sequential = sequential;
+// TODO verify that this works correctly in all situations
+var concurrent = function concurrent(a) {
+  return function (action) {
+    var out = new Array(a.length);
+
+    var actions = [];
 
     var pending = a.length;
 
     var failed = false;
 
-    var onAbort = function onAbort() {
+    var onTerminate = function onTerminate() {
       if (!failed) {
         failed = true;
-        abortAll(tasks);
+        terminateAll(actions);
       }
     };
 
@@ -1347,93 +1242,94 @@ var concurrent = function concurrent(a) {
       if (!failed) {
         --pending;
         if (pending === 0) {
-          task.success(out);
+          action.success(out);
         }
       }
     };
 
     var onError = function onError(e) {
-      onAbort();
+      onTerminate();
       // Always emit all the errors
       // The error that is emitted first is non-deterministic
-      task.error(e);
+      action.error(e);
     };
 
     var onCancel = function onCancel() {
-      onAbort();
-      task.cancel();
+      onTerminate();
+      action.cancel();
     };
 
     var _loop2 = function (i) {
       // TODO test that this is always called asynchronously
+      // TODO does this leak `t` after `a[i]` succeeds ?
       var t = run(a[i], function (value) {
         out[i] = value;
         onSuccess();
       }, onError, onCancel);
 
-      tasks.push(t);
+      actions.push(t);
     };
 
     for (var i = 0; i < a.length; ++i) {
       _loop2(i);
     }
 
-    task.onAbort = onAbort;
+    action.onTerminate = onTerminate;
   };
 };
 
 exports.concurrent = concurrent;
 // TODO verify that this works correctly in all situations
-var race = function race(a) {
-  return function (task) {
-    var tasks = [];
+var fastest = function fastest(a) {
+  return function (action) {
+    var actions = [];
 
     var done = false;
 
-    var onAbort = function onAbort() {
+    var onTerminate = function onTerminate() {
       if (!done) {
         done = true;
-        abortAll(tasks);
+        terminateAll(actions);
       }
     };
 
     var onSuccess = function onSuccess(value) {
-      onAbort();
-      task.success(value);
+      onTerminate();
+      action.success(value);
     };
 
     var onError = function onError(e) {
-      onAbort();
+      onTerminate();
       // Always emit all the errors
       // The error that is emitted first is non-deterministic
-      task.error(e);
+      action.error(e);
     };
 
     // TODO should it only cancel if all the tasks fail ?
     var onCancel = function onCancel() {
-      onAbort();
-      task.cancel();
+      onTerminate();
+      action.cancel();
     };
 
     // TODO is it faster to use var or let ?
     for (var i = 0; i < a.length; ++i) {
       // TODO test that this is always called asynchronously
-      tasks.push(run(a[i], onSuccess, onError, onCancel));
+      actions.push(run(a[i], onSuccess, onError, onCancel));
     }
 
-    task.onAbort = onAbort;
+    action.onTerminate = onTerminate;
   };
 };
 
-exports.race = race;
+exports.fastest = fastest;
 // Often-used functionality
 var delay = function delay(ms) {
-  return function (task) {
+  return function (action) {
     var timer = setTimeout(function () {
-      task.success(undefined);
+      action.success(undefined);
     }, ms);
 
-    task.onAbort = function () {
+    action.onTerminate = function () {
       clearTimeout(timer);
     };
   };
@@ -1441,9 +1337,9 @@ var delay = function delay(ms) {
 
 exports.delay = delay;
 var log = function log(s) {
-  return function (task) {
+  return function (action) {
     console.log(s);
-    task.success(undefined);
+    action.success(undefined);
   };
 };
 exports.log = log;
@@ -1459,6 +1355,25 @@ var _createClass = (function () { function defineProperties(target, props) { for
 Object.defineProperty(exports, "__esModule", {
   value: true
 });
+var error_stack = function error_stack(e) {
+  if (e.stack != null) {
+    return e.stack;
+  } else {
+    return e;
+  }
+};
+
+exports.error_stack = error_stack;
+var fatal_error = function fatal_error(s) {
+  console.error("\n" + "=".repeat(50) + "\n" + s + "\n" + "=".repeat(50));
+};
+
+exports.fatal_error = fatal_error;
+var print_error = function print_error(e) {
+  console.error(error_stack(e));
+};
+
+exports.print_error = print_error;
 // This is significantly faster than using Array.prototype.reverse
 // http://jsperf.com/array-reverse-function
 var reverse = function reverse(array) {
@@ -1544,16 +1459,79 @@ exports.array_remove = array_remove;
 /*
 // TODO use setImmediate shim
 export const nextTick =
-  // setImmediate is ~52.86 times faster than setTimeout
+  // setImmediate is ~52 times faster than setTimeout
   (typeof setImmediate === "function"
-    ? setImmediate                   // ~3,700
-    : (f) => { setTimeout(f, 0) });  // ~70
+    ? setImmediate                   // ~39,000
+    : (f) => { setTimeout(f, 0) });  // ~750
 */
 
 var nextTick = function nextTick(f) {
   setImmediate(f);
 };
-exports.nextTick = nextTick;
+
+var task_queue = new Queue();
+
+// Arbitrary number, just so long as it's big enough for normal use cases
+var TASK_QUEUE_MAX_CAPACITY = 1024;
+
+var TASK_QUEUE_FLUSHING = false;
+
+// Macrotask queue scheduler, similar to setImmediate
+var task_queue_flush = function task_queue_flush() {
+  if (!TASK_QUEUE_FLUSHING) {
+    (function () {
+      TASK_QUEUE_FLUSHING = true;
+
+      var loop = (function (_loop) {
+        function loop() {
+          return _loop.apply(this, arguments);
+        }
+
+        loop.toString = function () {
+          return _loop.toString();
+        };
+
+        return loop;
+      })(function () {
+        var pending = task_queue.length;
+
+        // Process all the tasks that were queued up, but if more tasks are queued, they are not processed
+        do {
+          // Pull the task out of the queue and then call it
+          task_queue.pull()();
+          --pending;
+        } while (pending !== 0);
+
+        // We're done processing all of the tasks
+        if (task_queue.length === 0) {
+          TASK_QUEUE_FLUSHING = false;
+
+          // Process any remaining tasks
+        } else {
+          // TODO this is necessary in order to terminate infinite loops, but is there a better way ?
+          nextTick(loop);
+        }
+      });
+
+      // TODO this is necessary in order to terminate infinite loops, but is there a better way ?
+      nextTick(loop);
+    })();
+  }
+};
+
+// TODO is this a good idea ? it's useful for stuff like Streams, but do we want *all* Tasks to behave this way ?
+// TODO use the asap polyfill ?
+var async = function async(f) {
+  task_queue.push(f);
+
+  // Warn if the task queue gets too big
+  if (task_queue.length > TASK_QUEUE_MAX_CAPACITY) {
+    console.warn("Task queue has " + task_queue.length + " items, which is greater than the max capacity of " + TASK_QUEUE_MAX_CAPACITY);
+  }
+
+  task_queue_flush();
+};
+exports.async = async;
 
 },{}],7:[function(require,module,exports){
 "use strict";
@@ -1573,19 +1551,19 @@ var _run$_finally$with_resource = require("../../FFI/Task");
 var _fs = require("fs");
 var _path = require("path");
 
-var callback = function callback(task) {
+var callback = function callback(action) {
   return function (err, value) {
     if (err) {
-      task.error(err);
+      action.error(err);
     } else {
-      task.success(value);
+      action.success(value);
     }
   };
 };
 
 exports.callback = callback;
 var read_from_Node = function read_from_Node(input, output) {
-  return function (task) {
+  return function (action) {
     var finished = false;
 
     var cleanup = function cleanup() {
@@ -1597,18 +1575,18 @@ var read_from_Node = function read_from_Node(input, output) {
       }
     };
 
-    task.onAbort = function () {
+    action.onTerminate = function () {
       cleanup();
     };
 
     var onEnd = function onEnd() {
       cleanup();
-      task.success(undefined);
+      action.success(undefined);
     };
 
     var onError = function onError(e) {
       cleanup();
-      task.error(e);
+      action.error(e);
     };
 
     var onReadable = (function (_onReadable) {
@@ -1632,9 +1610,9 @@ var read_from_Node = function read_from_Node(input, output) {
             // TODO is it possible for onEnd to be called after the Stream is closed, and thus double-close it ?
             var t = _run$_finally$with_resource.run(_push$pull$close.push(output, chunk), onReadable, onError, onEnd);
 
-            task.onAbort = function () {
+            action.onTerminate = function () {
               cleanup();
-              t.abort();
+              t.terminate();
             };
           })();
         }
@@ -1653,7 +1631,7 @@ var read_from_Node = function read_from_Node(input, output) {
 
 exports.read_from_Node = read_from_Node;
 var write_to_Node = function write_to_Node(input, output) {
-  return function (task) {
+  return function (action) {
     var finished = false;
 
     var cleanup = function cleanup() {
@@ -1667,24 +1645,24 @@ var write_to_Node = function write_to_Node(input, output) {
       }
     };
 
-    task.onAbort = function () {
+    action.onTerminate = function () {
       cleanup();
     };
 
     // TODO is this correct? maybe get rid of the "finish" event entirely ?
     var onFinish = function onFinish() {
       cleanup();
-      task.error(new Error("This should never happen"));
+      action.error(new Error("This should never happen"));
     };
 
     var onCancel = function onCancel() {
       cleanup();
-      task.success(undefined);
+      action.success(undefined);
     };
 
     var onError = function onError(e) {
       cleanup();
-      task.error(e);
+      action.error(e);
     };
 
     var onSuccess = function onSuccess(value) {
@@ -1701,9 +1679,9 @@ var write_to_Node = function write_to_Node(input, output) {
         (function () {
           var t = _run$_finally$with_resource.run(_push$pull$close.pull(input), onSuccess, onError, onCancel);
 
-          task.onAbort = function () {
+          action.onTerminate = function () {
             cleanup();
-            t.abort();
+            t.terminate();
           };
         })();
       }
@@ -1728,14 +1706,14 @@ var write_to_Node = function write_to_Node(input, output) {
 
 exports.write_to_Node = write_to_Node;
 var fs_close = function fs_close(fd) {
-  return function (task) {
-    _fs.close(fd, callback(task));
+  return function (action) {
+    _fs.close(fd, callback(action));
   };
 };
 
 var fs_open = function fs_open(path, flags) {
-  return function (task) {
-    _fs.open(path, flags, callback(task));
+  return function (action) {
+    _fs.open(path, flags, callback(action));
   };
 };
 
@@ -1761,37 +1739,37 @@ var write_file = function write_file(input, path) {
 
 exports.write_file = write_file;
 var rename_file = function rename_file(from, to) {
-  return function (task) {
-    _fs.rename(from, to, callback(task));
+  return function (action) {
+    _fs.rename(from, to, callback(action));
   };
 };
 
 exports.rename_file = rename_file;
 var symlink = function symlink(from, to) {
-  return function (task) {
-    _fs.symlink(from, to, callback(task));
+  return function (action) {
+    _fs.symlink(from, to, callback(action));
   };
 };
 
 exports.symlink = symlink;
 // TODO is this necessary / useful ?
 var real_path = function real_path(path) {
-  return function (task) {
-    _fs.realpath(path, callback(task));
+  return function (action) {
+    _fs.realpath(path, callback(action));
   };
 };
 
 exports.real_path = real_path;
 var remove_file = function remove_file(path) {
-  return function (task) {
-    _fs.unlink(path, callback(task));
+  return function (action) {
+    _fs.unlink(path, callback(action));
   };
 };
 
 exports.remove_file = remove_file;
 var remove_directory = function remove_directory(path) {
-  return function (task) {
-    _fs.rmdir(path, callback(task));
+  return function (action) {
+    _fs.rmdir(path, callback(action));
   };
 };
 
@@ -1799,16 +1777,16 @@ exports.remove_directory = remove_directory;
 // TODO this should probably return something indicating whether the directory
 //      already existed or not, or perhaps have another function for that ?
 var make_directory = function make_directory(path) {
-  return function (task) {
+  return function (action) {
     _fs.mkdir(path, function (err) {
       if (err) {
         if (err.code === "EEXIST") {
-          task.success(undefined);
+          action.success(undefined);
         } else {
-          task.error(err);
+          action.error(err);
         }
       } else {
-        task.success(undefined);
+        action.success(undefined);
       }
     });
   };
@@ -1816,8 +1794,8 @@ var make_directory = function make_directory(path) {
 
 exports.make_directory = make_directory;
 var files_from_directory = function files_from_directory(path) {
-  return function (task) {
-    _fs.readdir(path, callback(task));
+  return function (action) {
+    _fs.readdir(path, callback(action));
   };
 };
 
@@ -1825,12 +1803,12 @@ exports.files_from_directory = files_from_directory;
 // TODO is it faster or slower to use `fs.stat` to check for a directory,
 //      rather than relying upon the error message ?
 var files_from_directory_recursive = function files_from_directory_recursive(file) {
-  return function (task) {
+  return function (action) {
     var out = [];
 
     var pending = 0;
 
-    var aborted = false;
+    var terminated = false;
 
     function loop(files, parent, prefix) {
       pending += files.length;
@@ -1842,18 +1820,18 @@ var files_from_directory_recursive = function files_from_directory_recursive(fil
         _fs.readdir(new_parent, function (err, files) {
           if (err) {
             if (err.code === "ENOTDIR") {
-              if (!aborted) {
+              if (!terminated) {
                 out.push(new_prefix);
 
                 --pending;
                 if (pending === 0) {
-                  task.success(out);
+                  action.success(out);
                 }
               }
             } else {
-              task.error(err);
+              action.error(err);
             }
-          } else if (!aborted) {
+          } else if (!terminated) {
             --pending;
             loop(files, new_parent, new_prefix);
           }
@@ -1863,14 +1841,14 @@ var files_from_directory_recursive = function files_from_directory_recursive(fil
 
     _fs.readdir(file, function (err, files) {
       if (err) {
-        task.error(err);
-      } else if (!aborted) {
+        action.error(err);
+      } else if (!terminated) {
         loop(files, file, "");
       }
     });
 
-    task.onAbort = function () {
-      aborted = true;
+    action.onTerminate = function () {
+      terminated = true;
     };
   };
 };
@@ -1946,7 +1924,7 @@ exports.is_hidden_file = is_hidden_file;
 },{"path":2}],9:[function(require,module,exports){
 "use strict";
 
-var _run_root$_bind$_finally$on_cancel$ignore$success$log$concurrent$thread$delay$race$thread_kill$run = require("../FFI/Task");
+var _run_root$_bind$_finally$on_cancel$ignore$success$log$never$concurrent$thread$delay$fastest$thread_kill$run = require("../FFI/Task");
 
 var _push$pull$close$stream_fixed = require("../FFI/Stream");
 
@@ -1964,7 +1942,7 @@ var _void = function _void() {
 };
 
 var ignore_concurrent = function ignore_concurrent(a) {
-  return _run_root$_bind$_finally$on_cancel$ignore$success$log$concurrent$thread$delay$race$thread_kill$run.ignore(_run_root$_bind$_finally$on_cancel$ignore$success$log$concurrent$thread$delay$race$thread_kill$run.concurrent(a));
+  return _run_root$_bind$_finally$on_cancel$ignore$success$log$never$concurrent$thread$delay$fastest$thread_kill$run.ignore(_run_root$_bind$_finally$on_cancel$ignore$success$log$never$concurrent$thread$delay$fastest$thread_kill$run.concurrent(a));
 };
 
 var stream = function stream() {
@@ -1982,18 +1960,27 @@ var forever = (function (_forever) {
 
   return forever;
 })(function (task) {
-  return _run_root$_bind$_finally$on_cancel$ignore$success$log$concurrent$thread$delay$race$thread_kill$run._bind(task, function (_) {
+  return _run_root$_bind$_finally$on_cancel$ignore$success$log$never$concurrent$thread$delay$fastest$thread_kill$run._bind(task, function (_) {
     return forever(task);
   });
 });
 
 var with_stream = function with_stream(task) {
-  return _run_root$_bind$_finally$on_cancel$ignore$success$log$concurrent$thread$delay$race$thread_kill$run.on_cancel(_run_root$_bind$_finally$on_cancel$ignore$success$log$concurrent$thread$delay$race$thread_kill$run.ignore(task), _run_root$_bind$_finally$on_cancel$ignore$success$log$concurrent$thread$delay$race$thread_kill$run.success(_void()));
+  return _run_root$_bind$_finally$on_cancel$ignore$success$log$never$concurrent$thread$delay$fastest$thread_kill$run.on_cancel(_run_root$_bind$_finally$on_cancel$ignore$success$log$never$concurrent$thread$delay$fastest$thread_kill$run.ignore(task), _run_root$_bind$_finally$on_cancel$ignore$success$log$never$concurrent$thread$delay$fastest$thread_kill$run.success(_void()));
 };
 
 var stream_each = function stream_each(_in, f) {
-  return with_stream(forever(_run_root$_bind$_finally$on_cancel$ignore$success$log$concurrent$thread$delay$race$thread_kill$run._bind(_push$pull$close$stream_fixed.pull(_in), f)));
+  return with_stream(forever(_run_root$_bind$_finally$on_cancel$ignore$success$log$never$concurrent$thread$delay$fastest$thread_kill$run._bind(_push$pull$close$stream_fixed.pull(_in), f)));
 };
+
+/*const stream_foldl = (init, _in, f) => {
+  const next = (old) =>
+    // TODO using on_cancel leaks memory, because it's not tail-recursive
+    on_cancel(_bind(pull(_in), (value) =>
+              _bind(f(old, value), next)),
+              success(old));
+  return next(init);
+};*/
 
 var stream_foldl = function stream_foldl(init, _in, f) {
   var next = (function (_next) {
@@ -2007,26 +1994,25 @@ var stream_foldl = function stream_foldl(init, _in, f) {
 
     return next;
   })(function (old) {
-    return _run_root$_bind$_finally$on_cancel$ignore$success$log$concurrent$thread$delay$race$thread_kill$run.on_cancel(_run_root$_bind$_finally$on_cancel$ignore$success$log$concurrent$thread$delay$race$thread_kill$run._bind(_push$pull$close$stream_fixed.pull(_in), function (value) {
-      return _run_root$_bind$_finally$on_cancel$ignore$success$log$concurrent$thread$delay$race$thread_kill$run._bind(f(old, value), next);
-    }), _run_root$_bind$_finally$on_cancel$ignore$success$log$concurrent$thread$delay$race$thread_kill$run.success(old));
+    return _run_root$_bind$_finally$on_cancel$ignore$success$log$never$concurrent$thread$delay$fastest$thread_kill$run._bind(_push$pull$close$stream_fixed.pull(_in), function (value) {
+      return _run_root$_bind$_finally$on_cancel$ignore$success$log$never$concurrent$thread$delay$fastest$thread_kill$run._bind(f(old, value), next);
+    });
   });
   return next(init);
 };
 
 var copy_file = function copy_file(from, to) {
-  return _run_root$_bind$_finally$on_cancel$ignore$success$log$concurrent$thread$delay$race$thread_kill$run._bind(stream(), function (s) {
+  return _run_root$_bind$_finally$on_cancel$ignore$success$log$never$concurrent$thread$delay$fastest$thread_kill$run._bind(stream(), function (s) {
     return ignore_concurrent([_read_file$write_file$files_from_directory_recursive.read_file(from, s), _read_file$write_file$files_from_directory_recursive.write_file(s, to)]);
   });
 };
 
 var current_time = function current_time(task) {
-  return task.success(Date.now());
+  task.success(Date.now());
 };
 
-//////////////////////////////////////////////////////////////////////////////
-
-var generate_add = function generate_add(out) {
+var benchmark = function benchmark(t) {
+  var end = Date.now() + 10000;
   var next = (function (_next2) {
     function next(_x3) {
       return _next2.apply(this, arguments);
@@ -2038,14 +2024,20 @@ var generate_add = function generate_add(out) {
 
     return next;
   })(function (i) {
-    return _run_root$_bind$_finally$on_cancel$ignore$success$log$concurrent$thread$delay$race$thread_kill$run._bind(_push$pull$close$stream_fixed.push(out, i), function (_) {
-      return next(i + 1);
-    });
+    if (Date.now() < end) {
+      return _run_root$_bind$_finally$on_cancel$ignore$success$log$never$concurrent$thread$delay$fastest$thread_kill$run._bind(t, function (_) {
+        return next(i + 1);
+      });
+    } else {
+      return _run_root$_bind$_finally$on_cancel$ignore$success$log$never$concurrent$thread$delay$fastest$thread_kill$run.success(i);
+    }
   });
-  return with_stream(next(0));
+  return next(0);
 };
 
-var generate_multiply = function generate_multiply(out) {
+//////////////////////////////////////////////////////////////////////////////
+
+var generate_add = function generate_add(out) {
   var next = (function (_next3) {
     function next(_x4) {
       return _next3.apply(this, arguments);
@@ -2057,7 +2049,26 @@ var generate_multiply = function generate_multiply(out) {
 
     return next;
   })(function (i) {
-    return _run_root$_bind$_finally$on_cancel$ignore$success$log$concurrent$thread$delay$race$thread_kill$run._bind(_push$pull$close$stream_fixed.push(out, i), function (_) {
+    return _run_root$_bind$_finally$on_cancel$ignore$success$log$never$concurrent$thread$delay$fastest$thread_kill$run._bind(_push$pull$close$stream_fixed.push(out, i), function (_) {
+      return next(i + 1);
+    });
+  });
+  return with_stream(next(0));
+};
+
+var generate_multiply = function generate_multiply(out) {
+  var next = (function (_next4) {
+    function next(_x5) {
+      return _next4.apply(this, arguments);
+    }
+
+    next.toString = function () {
+      return _next4.toString();
+    };
+
+    return next;
+  })(function (i) {
+    return _run_root$_bind$_finally$on_cancel$ignore$success$log$never$concurrent$thread$delay$fastest$thread_kill$run._bind(_push$pull$close$stream_fixed.push(out, i), function (_) {
       return next(i * 2);
     });
   });
@@ -2072,37 +2083,37 @@ var generate_multiply = function generate_multiply(out) {
 
 var accumulate = function accumulate(_in) {
   return stream_foldl(0, _in, function (old, value) {
-    return _run_root$_bind$_finally$on_cancel$ignore$success$log$concurrent$thread$delay$race$thread_kill$run.success(old + value);
+    return _run_root$_bind$_finally$on_cancel$ignore$success$log$never$concurrent$thread$delay$fastest$thread_kill$run.success(old + value);
   });
 };
 
 var log_current_time = function log_current_time(max) {
-  var next = (function (_next4) {
-    function next(_x5) {
-      return _next4.apply(this, arguments);
+  var next = (function (_next5) {
+    function next(_x6) {
+      return _next5.apply(this, arguments);
     }
 
     next.toString = function () {
-      return _next4.toString();
+      return _next5.toString();
     };
 
     return next;
   })(function (i) {
     if (i < max) {
-      return _run_root$_bind$_finally$on_cancel$ignore$success$log$concurrent$thread$delay$race$thread_kill$run._bind(current_time, function (now) {
-        return _run_root$_bind$_finally$on_cancel$ignore$success$log$concurrent$thread$delay$race$thread_kill$run._bind(_run_root$_bind$_finally$on_cancel$ignore$success$log$concurrent$thread$delay$race$thread_kill$run.log(now), function (_) {
+      return _run_root$_bind$_finally$on_cancel$ignore$success$log$never$concurrent$thread$delay$fastest$thread_kill$run._bind(current_time, function (now) {
+        return _run_root$_bind$_finally$on_cancel$ignore$success$log$never$concurrent$thread$delay$fastest$thread_kill$run._bind(_run_root$_bind$_finally$on_cancel$ignore$success$log$never$concurrent$thread$delay$fastest$thread_kill$run.log(now), function (_) {
           return next(i + 1);
         });
       });
     } else {
-      return _run_root$_bind$_finally$on_cancel$ignore$success$log$concurrent$thread$delay$race$thread_kill$run.success(_void());
+      return _run_root$_bind$_finally$on_cancel$ignore$success$log$never$concurrent$thread$delay$fastest$thread_kill$run.success(_void());
     }
   });
   return next(0);
 };
 
 var increment = (function (_increment) {
-  function increment(_x6) {
+  function increment(_x7) {
     return _increment.apply(this, arguments);
   }
 
@@ -2112,7 +2123,7 @@ var increment = (function (_increment) {
 
   return increment;
 })(function (i) {
-  return _run_root$_bind$_finally$on_cancel$ignore$success$log$concurrent$thread$delay$race$thread_kill$run._bind(_run_root$_bind$_finally$on_cancel$ignore$success$log$concurrent$thread$delay$race$thread_kill$run.log(i), function (_) {
+  return _run_root$_bind$_finally$on_cancel$ignore$success$log$never$concurrent$thread$delay$fastest$thread_kill$run._bind(_run_root$_bind$_finally$on_cancel$ignore$success$log$never$concurrent$thread$delay$fastest$thread_kill$run.log(i), function (_) {
     return increment(i + 1);
   });
 });
@@ -2122,8 +2133,9 @@ var increment = (function (_increment) {
 /*const main = () =>
   success(_void());*/
 
-/*const main = () =>
-  forever(success(5));*/
+var main = function main() {
+  return forever(_run_root$_bind$_finally$on_cancel$ignore$success$log$never$concurrent$thread$delay$fastest$thread_kill$run.success(5));
+};
 
 /*const main = () =>
   _bind(stream_fixed(1), (s) =>
@@ -2137,9 +2149,15 @@ var increment = (function (_increment) {
 
 //const main = () => increment(0);
 
-var main = function main() {
-  return _run_root$_bind$_finally$on_cancel$ignore$success$log$concurrent$thread$delay$race$thread_kill$run.race([increment(0), _run_root$_bind$_finally$on_cancel$ignore$success$log$concurrent$thread$delay$race$thread_kill$run.delay(60000)]);
-};
+/*const main = () =>
+  fastest([increment(0),
+           delay(5000)]);*/
+
+/*const main = () =>
+  thread(never());*/
+
+/*const main = () =>
+  _bind(benchmark(copy_file("/home/pauan/Scratch/2014-09-30", "/home/pauan/Scratch/tmp/foo")), log);*/
 
 /*const main = () =>
   forever(_bind(current_time, log));*/
@@ -2148,8 +2166,8 @@ var main = function main() {
   forever(log_current_time(10));*/
 
 /*const main = () =>
-  race([log_current_time(10),
-        success(5)]);*/
+  fastest([log_current_time(10),
+           success(5)]);*/
 
 /*const t = run(_finally(success(1), success(2)), () => {}, () => {}, () => {});
 
@@ -2160,9 +2178,7 @@ setTimeout(() => {
   });
 }, 2000);*/
 
-/*run(ignore(success(10))).abort(() => {
-  console.log("DONE");
-});*/
+//run(ignore(success(10))).terminate();
 
 /*const main = () =>
   _bind(stream_fixed(5), (s) =>
@@ -2190,6 +2206,6 @@ setTimeout(() => {
     ]));*/
 
 // browserify --transform babelify Nulan/Examples/Test/Test.js --outfile Nulan/Examples/Test/Test.build.js
-_run_root$_bind$_finally$on_cancel$ignore$success$log$concurrent$thread$delay$race$thread_kill$run.run_root(main);
+_run_root$_bind$_finally$on_cancel$ignore$success$log$never$concurrent$thread$delay$fastest$thread_kill$run.run_root(main);
 
 },{"../FFI/Stream":4,"../FFI/Task":5,"../Node.js/FFI/fs":7,"../Node.js/FFI/path":8}]},{},[9]);

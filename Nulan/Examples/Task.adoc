@@ -1,20 +1,23 @@
 .Task.nu
 [source]
 ----
+(TYPE Void)
+
 (TYPE (Task Value))
 
 (TYPE (Thread Value))
 
 (EXPORT { FFI-PROGRAM-START
+          void = _void
           error
           cancel
           never
+          # TODO maybe get rid of finally ?
           finally = _finally
           on-cancel = on_cancel
-          w/resource
+          W/RESOURCE
           # TODO maybe rename `execute` to something else ?
           Task<- = execute
-          ignore
           # TODO get rid of all thread stuff ?
           thread
           thread-wait = thread_wait
@@ -26,6 +29,8 @@
           log }
 
   (FFI-IMPORT "Task"
+    _void :: (Task Void)
+
     (run_root :: (-> (-> (Task Void)) Void))
 
     (success :: (FORALL A
@@ -68,18 +73,17 @@
                        (Task A))))
 
 
-    "When executed, executes the first `Task`. If the first `Task` cancels,
-     then it will execute the second `Task`.
+    "When executed, executes the first `Task`.
 
-     If the first `Task` does not cancel, then the final result is the first
-     `Task`.
+     If the `Task` succeeds, it will call the function with the value of the
+     `Task`, and then executes the `Task` that the function returns.
 
-     If the first `Task` does cancel, then the final result is the second
-     `Task`."
-    (on_cancel :: (FORALL A
+     If the `Task` cancels, it will execute the second `Task`."
+    (on_cancel :: (FORALL A B
                     (-> (Task A)
-                        (Task A)
-                        (Task A))))
+                        (-> A (Task B))
+                        (Task B)
+                        (Task B))))
 
 
     "When executed, calls the function.
@@ -122,27 +126,6 @@
      then using `wrap` is perfectly fine."
     (execute :: (FORALL A
                   (-> (-> A) (Task A))))
-
-
-    "When executed, executes the `Task`.
-
-     If the `Task` returns, then the final result is `Void`.
-
-     If the `Task` errors, then this `Task` errors.
-
-     If the `Task` cancels, then this `Task` cancels.
-
-     ''''
-
-     This is useful if you aren't interested in the return value of a `Task`:
-
-     [source,nulan]
-     ----
-     (ignore (foo))
-     ----"
-    (ignore :: (FORALL A
-                 (-> (Task A)
-                     (Task Void))))
 
 
     "When executed, starts executing the `Task` in a new thread, then
@@ -456,15 +439,15 @@
 
      [source,nulan]
      ----
-     (w/resource x = (open-file \"foo\")
+     (W/RESOURCE x = (open-file \"foo\")
        (use-file x)
        (close-file x))
      ----
 
      If you had used `DO` and `finally`, then the file may end up leaking,
-     but by using `w/resource` you guarantee that the file will *always* be
+     but by using `W/RESOURCE` you guarantee that the file will *always* be
      closed."
-    (w/resource `(,name = ,before) during after)
+    (W/RESOURCE `(,name = ,before) during after)
       `(with_resource ,before
          (-> ,name ,during)
          (-> ,name ,after)))
@@ -478,6 +461,50 @@
      the function, then returns the `Task` that the function returns."
     (bind x f)
       (_bind x f)))
+
+(FUNCTION
+  "When executed, executes the `Task` in a new thread, then immediately calls
+   the function with the `Thread`, then executes the `Task` that the function
+   returns. When that `Task` finishes (for any reason), it will then kill the
+   `Thread`.
+
+   ''''
+
+   This is useful when you want to run a `Task` in a new thread, and guarantee
+   that the `Thread` will get cleaned up no matter what happens."
+  (w/thread :: (FORALL A B
+                 (-> (Task A)
+                     (-> (Thread A) (Task B))
+                     (Task B))))
+  (w/thread task f)
+    # TODO does this leak? should it use W/RESOURCE instead ?
+    (DO t = (thread task)
+      (finally (f t)
+               (thread-kill! t))))
+
+(FUNCTION
+  "When executed, executes the `Task`.
+
+   If the `Task` returns, then the final result is `Void`.
+
+   If the `Task` errors, then this `Task` errors.
+
+   If the `Task` cancels, then this `Task` cancels.
+
+   ''''
+
+   This is useful if you aren't interested in the return value of a `Task`:
+
+   [source,nulan]
+   ----
+   (DO (ignore (foo))
+       (bar))
+   ----"
+  (ignore :: (FORALL A
+               (-> (Task A) (Task Void))))
+  (ignore task)
+    (DO _ = task
+        void))
 
 (FUNCTION
   "When executed, executes the `Task` forever, as quickly as possible."
