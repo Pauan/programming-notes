@@ -97,8 +97,7 @@ export const run = (task, onSuccess, onError, onCancel) => {
     terminate: () => {
       const f = action.onTerminate;
 
-      // It's okay to call success after terminate
-      cleanup(action, cleanup_success, cleanup_terminate_error);
+      cleanup(action, cleanup_success_error, cleanup_terminate_error);
 
       // Not every action supports termination
       if (f !== null) {
@@ -306,24 +305,17 @@ export const _bind = (task, f) => (action) => {
       // Runs the task in a tail-recursive manner, so that it consumes a
       // constant amount of memory, even if it's an infinite loop
       f(value)(action);
-
-      /*const a2 = run(f(value), action.success, action.error, action.cancel);
-
-      // TODO is it even possible for this to occur ?
-      action.onTerminate = () => {
-        a2.terminate();
-      };*/
     }
   };
 
   // TODO slightly inefficient
-  // TODO is this needed to prevent a memory leak of `a1` ?
+  // TODO is this needed to prevent a memory leak of `a` ?
   (function () {
-    const a1 = run(task, onSuccess, action.error, action.cancel);
+    const a = run(task, onSuccess, action.error, action.cancel);
 
     action.onTerminate = () => {
       terminated = true;
-      a1.terminate();
+      a.terminate();
     };
   })();
 };
@@ -336,6 +328,7 @@ export const with_resource = (before, during, after) => (action) => {
   run(before, (value) => {
     action.onTerminate = null;
 
+    // TODO is this correct ?
     if (terminated) {
       // This is always run, even if it's terminated
       // TODO maybe this should use `after(value)(action)` instead ?
@@ -401,6 +394,7 @@ export const _finally = (before, after) => (action) => {
 };
 
 export const on_cancel = (task, x, y) => (action) => {
+  // TODO is this necessary ?
   let terminated = false;
 
   const onSuccess = (value) => {
@@ -421,13 +415,13 @@ export const on_cancel = (task, x, y) => (action) => {
   };
 
   // TODO slightly inefficient
-  // TODO is this needed to prevent a memory leak of `t` ?
+  // TODO is this needed to prevent a memory leak of `a` ?
   (function () {
-    const t = run(task, onSuccess, action.error, onCancel);
+    const a = run(task, onSuccess, action.error, onCancel);
 
     action.onTerminate = () => {
       terminated = true;
-      t.terminate();
+      a.terminate();
     };
   })();
 };
@@ -469,7 +463,9 @@ export const sequential = (a) => (action) => {
   const loop = (i) => {
     if (i < a["length"]) {
       const onSuccess = (value) => {
+        // TODO is this necessary ?
         if (!terminated) {
+          // TODO is this necessary ?
           action.onTerminate = null;
           out[i] = value;
           loop(i + 1);
@@ -477,13 +473,13 @@ export const sequential = (a) => (action) => {
       };
 
       // TODO slightly inefficient
-      // TODO is this needed to prevent a memory leak of `t` ?
+      // TODO is this needed to prevent a memory leak of `a` ?
       (function () {
-        const t = run(a[i], onSuccess, action.error, action.cancel);
+        const a = run(a[i], onSuccess, action.error, action.cancel);
 
         action.onTerminate = () => {
           terminated = true;
-          t.terminate();
+          a.terminate();
         };
       })();
 

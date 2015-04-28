@@ -31,7 +31,9 @@
   (FFI-IMPORT "Task"
     _void :: (Task Void)
 
+
     (run_root :: (-> (-> (Task Void)) Void))
+
 
     (success :: (FORALL A
                   (-> A (Task A))))
@@ -57,6 +59,7 @@
                     (-> A (Task B))
                     (Task B))))
 
+
     (with_resource :: (FORALL A B
                         (-> (Task A)
                             (-> A (Task B))
@@ -66,7 +69,7 @@
 
     "When executed, executes the first `Task`, and then executes the second
      `Task`. The second `Task` is *always* executed, even if the first `Task`
-     returns, errors, cancels, or aborts."
+     returns, errors, cancels, or terminates."
     (_finally :: (FORALL A
                    (-> (Task A)
                        (Task Void)
@@ -103,8 +106,8 @@
 
      [source,nulan]
      ----
-     (finally (Task<- -> (foo))
-              (bar))
+     (DO (Task<- -> (foo))
+         (bar))
      ----
 
      You should use `Task<-` when you have a pure *computation* that you want
@@ -117,8 +120,8 @@
 
      [source,nulan]
      ----
-     (finally (wrap 5)
-              (bar))
+     (DO (wrap 5)
+         (bar))
      ----
 
      The only difference between `wrap` and `Task<-` is that `wrap` doesn't
@@ -135,8 +138,8 @@
 
      ''''
 
-     That means that the `Task` will run in parallel with all other `Task`s
-     in the program:
+     That means that the `Task` will execute in parallel with all other
+     `Task`s in the program:
 
      [source,nulan]
      ----
@@ -146,8 +149,8 @@
      ----
 
      Sometimes that is exactly what you want, but you should use `thread`
-     sparingly: having many `Task`s running simultaneously at arbitrary times
-     can make your program much more difficult to understand.
+     sparingly: `Task`s executing simultaneously at arbitrary times can make
+     your program much more difficult to understand.
 
      Instead, consider using `concurrent` or `fastest`, which are much easier
      to understand. Using `concurrent` or `fastest` also handles errors better
@@ -156,8 +159,8 @@
      So, when should you use `thread`? Well, basically, whenever `concurrent`
      and `fastest` don't work for what you're trying to do.
 
-     But perhaps you can find an alternate design that _does_ work with
-     `concurrent` or `fastest`."
+     But perhaps you can find an alternate way of writing your program that
+     _does_ work with `concurrent` or `fastest`."
     (thread :: (FORALL A
                  (-> (Task A) (Thread A))))
 
@@ -199,19 +202,23 @@
      for both to complete, and then call `qux` with the return value of
      `(foo)` and `(bar)`.
 
-     However, the above can be done more concisely and efficiently by using
-     `concurrent`:
+     However, the above example can instead be written using `concurrent`,
+     which is more concise, more efficient, and handles errors better than
+     `thread`:
 
      [source,nulan]
      ----
      (DO (list v1 v2) = (concurrent (foo) (bar))
          (qux v1 v2))
-     ----"
+     ----
+
+     So you should prefer using `concurrent` rather than `thread-wait`,
+     whenever you can."
     (thread_wait :: (FORALL A
                       (-> (Thread A) (Task A))))
 
 
-    "When executed, kills the `Thread`, aborting any partially-complete
+    "When executed, kills the `Thread`, terminating any partially-complete
      computations.
 
      It will try to stop the computations as soon as possible, but they might
@@ -222,7 +229,7 @@
 
      ''''
 
-     This can be used to abort a long-running computation:
+     This can be used to stop a long-running computation:
 
      [source,nulan]
      ----
@@ -295,7 +302,7 @@
      `Task`s.
 
      If any of the `Task`s errors or cancels, the remaining `Task`s are
-     aborted.
+     terminated.
 
      ''''
 
@@ -343,7 +350,7 @@
      The `Task` that returns first is the final result.
 
      If any of the `Task`s returns, errors, or cancels, the remaining `Task`s
-     are aborted.
+     are terminated.
 
      ''''
 
@@ -361,8 +368,8 @@
      (fastest (foo) (delay 2000))
      ----
 
-     The above two code examples are equivalent: they both execute `(foo)` in
-     parallel, and then aborts it if it takes longer than `2000` milliseconds.
+     The above two code examples are equivalent: they both execute `(foo)`,
+     and then terminates it if it takes longer than `2000` milliseconds.
 
      But `fastest` is more concise, and more efficient too! In addition, it
      handles errors much better than `thread`.
@@ -430,9 +437,9 @@
   (MACRO
     "When executed, executes the first `Task`, binding the return value to a
      variable. Then the second `Task` is executed, and afterwards the third
-     `Task` is executed. The third `Task` is *always* run, even if the second
-     `Task` returns, errors, cancels, or aborts. If the second `Task` returns,
-     then that is the final return value.
+     `Task` is executed. The third `Task` is *always* executed, even if the
+     second `Task` returns, errors, cancels, or terminates. If the second
+     `Task` returns, then that is the final return value.
 
      This is very useful for initializing a resource, using the resource, and
      then cleaning up the resource:
@@ -462,6 +469,7 @@
     (bind x f)
       (_bind x f)))
 
+
 (FUNCTION
   "When executed, executes the `Task` in a new thread, then immediately calls
    the function with the `Thread`, then executes the `Task` that the function
@@ -470,8 +478,8 @@
 
    ''''
 
-   This is useful when you want to run a `Task` in a new thread, and guarantee
-   that the `Thread` will get cleaned up no matter what happens."
+   This is useful when you want to execute a `Task` in a new thread, and
+   guarantee that the `Thread` will get cleaned up no matter what happens."
   (w/thread :: (FORALL A B
                  (-> (Task A)
                      (-> (Thread A) (Task B))
@@ -516,10 +524,11 @@
 
 (FUNCTION
   "When executed, executes the `Task`, but if it takes longer than a certain
-   number of milliseconds, the `Task` is aborted."
+   number of milliseconds, the `Task` is terminated."
   (timeout :: (FORALL A
                 (-> Integer (Task Void) (Task Void))))
   (timeout ms task)
+    # TODO if it times out, maybe it should cancel rather than returning Void ?
     (fastest task (delay ms)))
 
 (FUNCTION
