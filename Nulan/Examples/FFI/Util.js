@@ -2,6 +2,8 @@ export const error_stack = (e) => {
   if (e["stack"] != null) {
     return e["stack"];
   } else {
+    // TODO test this
+    // TODO I think this was to handle stack overflow errors or something like that ?
     return e;
   }
 };

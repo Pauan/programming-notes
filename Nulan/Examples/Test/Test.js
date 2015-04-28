@@ -134,8 +134,11 @@ const increment = (i) =>
   _bind(thread(forever(log("a"))), (_) =>
     forever(log("b")));*/
 
+/*const main = () =>
+  _bind(benchmark(copy_file("/home/pauan/Scratch/2014-09-30", "/home/pauan/Scratch/tmp/foo")), log);*/
+
 const main = () =>
-  _bind(benchmark(copy_file("/home/pauan/Scratch/2014-09-30", "/home/pauan/Scratch/tmp/foo")), log);
+  forever(copy_file("/home/pauan/Scratch/2014-09-30", "/home/pauan/Scratch/tmp/foo"));
 
 /*const main = () =>
   forever(_bind(current_time, log));*/
@@ -162,9 +165,6 @@ setTimeout(() => {
   _bind(stream_fixed(5), (s) =>
     ignore_concurrent([read_file("/home/pauan/Scratch/2014-09-30", s),
                        stream_each(s, (x) => log(x))]));*/
-
-/*const main = () =>
-  copy_file("/home/pauan/Scratch/2014-09-30", "/home/pauan/Scratch/tmp/foo");*/
 
 /*const main = () =>
   _bind(files_from_directory_recursive("/home/pauan/Scratch"), (a) =>

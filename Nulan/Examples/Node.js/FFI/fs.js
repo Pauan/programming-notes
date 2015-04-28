@@ -70,33 +70,37 @@ export const read_from_Node = (input, output) => (action) => {
 export const write_to_Node = (input, output) => (action) => {
   let finished = false;
 
+  // TODO only call this once ?
   const cleanup = () => {
-    if (!finished) {
-      finished = true;
-      output["removeListener"]("finish", onFinish);
-      output["removeListener"]("error", onError);
-      output["removeListener"]("drain", onDrain);
-      // TODO is this correct ?
-      output["end"]();
-    }
+    finished = true;
+    output["removeListener"]("finish", onFinish);
+    output["removeListener"]("error", onError);
+    output["removeListener"]("drain", onDrain);
   };
 
   action.onTerminate = () => {
+    // TODO should this end the output ?
     cleanup();
   };
 
-  // TODO is this correct? maybe get rid of the "finish" event entirely ?
   const onFinish = () => {
-    cleanup();
-    action.error(new Error("This should never happen"));
-  };
-
-  const onCancel = () => {
     cleanup();
     action.success(undefined);
   };
 
+  // TODO is this whole thing correct ?
+  const onCancel = () => {
+    // This is just in case `onFinish` gets called before `onCancel`
+    if (!finished) {
+      // We set this just in case `onDrain` ends up getting called
+      finished = true;
+      // We don't cleanup, because that's handled by `onFinish`
+      output["end"]();
+    }
+  };
+
   const onError = (e) => {
+    // TODO should this end the output ?
     cleanup();
     action.error(e);
   };
@@ -115,6 +119,7 @@ export const write_to_Node = (input, output) => (action) => {
       const t = run(pull(input), onSuccess, onError, onCancel);
 
       action.onTerminate = () => {
+        // TODO should this end the output ?
         cleanup();
         t.terminate();
       };
