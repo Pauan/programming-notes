@@ -1,0 +1,56 @@
+(USE {} = "nulan:Maybe")
+
+(TYPE (List A))
+
+
+(EXPORT { list
+          nth
+          nth-insert = nth_insert
+          nth-remove = nth_remove
+          nth-modify = nth_modify
+          push }
+
+  (FFI-IMPORT "FFI/List"
+    # TODO this needs special compiler magic
+    (list :: (FORALL A
+               (-> @A (List A))))
+
+    (list_slice :: (FORALL A
+                     (-> (List A) Integer Integer (List A))))
+
+    (list_length :: (FORALL A
+                      (-> (List A) Integer)))
+
+    (list_concat :: (FORALL A
+                      (-> @(List A) (List A))))
+
+    (nth_get :: (FORALL A B
+                  (-> (List A) Integer (-> A B) (-> B) B)))
+
+    (nth_insert :: (FORALL A
+                     (-> (List A) Integer A (List A))))
+
+    (nth_remove :: (FORALL A
+                     (-> (List A) Integer (List A))))
+
+    (nth_modify :: (FORALL A
+                     (-> (List A) Integer (-> A A) (List A))))
+
+    # This can be implemented with nth_insert + list_length,
+    # but it's more efficient to have it be written in the FFI
+    (push :: (FORALL A
+               (-> (List A) A (List A)))))
+
+
+  (FUNCTION
+    (nth :: (FORALL A
+              (-> (List A) Integer (Maybe A))))
+    (nth l i)
+      (nth_get l i *something *nothing)))
+
+
+(FUNCTION
+  (nth-set :: (FORALL A
+                (-> (List A) Integer A (List A))))
+  (nth-set l i x)
+    (nth-modify l i -> _ x))

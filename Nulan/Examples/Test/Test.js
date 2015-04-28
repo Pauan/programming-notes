@@ -38,21 +38,23 @@ const copy_file = (from, to) =>
   _bind(stream(), (s) =>
     ignore_concurrent([read_file(from, s), write_file(s, to)]));
 
-const current_time = (task) => {
-  task.success(Date.now());
+const current_time = (action) => {
+  action.success(Date["now"]());
 };
 
-const benchmark = (t) => {
-  const end = Date["now"]() + 10000;
-  const next = (i) => {
-    if (Date["now"]() < end) {
-      return _bind(t, (_) => next(i + 1));
-    } else {
-      return success(i);
-    }
-  };
-  return next(0);
-};
+const benchmark = (task) =>
+  _bind(current_time, (now) => {
+    const end = now + 10000;
+    const next = (i) =>
+      _bind(current_time, (now) => {
+        if (now < end) {
+          return _bind(task, (_) => next(i + 1));
+        } else {
+          return success(i);
+        }
+      });
+    return next(0);
+  });
 
 
 //////////////////////////////////////////////////////////////////////////////
@@ -132,8 +134,8 @@ const increment = (i) =>
   _bind(thread(forever(log("a"))), (_) =>
     forever(log("b")));*/
 
-/*const main = () =>
-  _bind(benchmark(copy_file("/home/pauan/Scratch/2014-09-30", "/home/pauan/Scratch/tmp/foo")), log);*/
+const main = () =>
+  _bind(benchmark(copy_file("/home/pauan/Scratch/2014-09-30", "/home/pauan/Scratch/tmp/foo")), log);
 
 /*const main = () =>
   forever(_bind(current_time, log));*/
@@ -168,7 +170,7 @@ setTimeout(() => {
   _bind(files_from_directory_recursive("/home/pauan/Scratch"), (a) =>
     log(a.filter((x) => !is_hidden_file(x))));*/
 
-const main = () =>
+/*const main = () =>
   _bind(stream(), (x) =>
     ignore_concurrent([
       generate_add(x),
@@ -177,9 +179,9 @@ const main = () =>
 
       accumulate(x),
 
-      /*_bind(delay(1000), (_) =>
-        debug("CLOSING", close(x)))*/
-    ]));
+      _bind(delay(1000), (_) =>
+        debug("CLOSING", close(x)))
+    ]));*/
 
 // browserify --transform babelify Nulan/Examples/Test/Test.js --outfile Nulan/Examples/Test/Test.build.js
 run_root(main);

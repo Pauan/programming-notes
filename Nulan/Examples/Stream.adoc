@@ -13,7 +13,7 @@
           push! = push
           stream/close! = close }
 
-  (FFI-IMPORT "Stream"
+  (FFI-IMPORT "FFI/Stream"
     (stream_fixed :: (FORALL A
                        (-> Integer (Task (Stream A)))))
 

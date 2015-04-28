@@ -28,7 +28,7 @@
           delay
           log }
 
-  (FFI-IMPORT "Task"
+  (FFI-IMPORT "FFI/Task"
     _void :: (Task Void)
 
 
