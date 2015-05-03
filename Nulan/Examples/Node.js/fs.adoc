@@ -4,7 +4,6 @@
 (USE {} = "nulan:Task")
 (USE {} = "nulan:Stream")
 
-(TYPE Stat)
 
 (EXPORT { read-file! = read_file
           write-file! = write_file
@@ -41,13 +40,17 @@
 
     (files_from_directory_recursive :: (-> String (Task (List String))))))
 
+
 # TODO maybe allow for passing in a stream which will be used instead of creating a new one?
 # TODO store to a temporary file so that it will work even if `from` and `to` are the same ?
 (FUNCTION
-  (copy-file! :: (-> String String (Task Void)))
-  (copy-file! from to)
-    (DO s = (stream)
-      (ignore-concurrent
-        (read-file! from s)
-        (write-file! s to))))
+  (copy-file :: (-> String String (Stream Void Void)))
+  (copy-file from to)
+    # TODO should this use real-path or path-normalize ?
+    (DO from = (real-path from)
+        to   = (real-path to)
+      (IF (equal? from to)
+        (error (STRING "Cannot read and write to the same file: @" from))
+        (pipe (read-file from)
+              (write-file to)))))
 ----

@@ -241,7 +241,7 @@ export const Promise_from_Task = (task) =>
   });
 
 // TODO does this work properly in all platforms ?
-const MAX_TIMER = Math.pow(2, 31) - 1;
+const MAX_TIMER = Math["pow"](2, 31) - 1;
 
 // TODO test this
 // TODO it creates a new timer for each Thread, it would be better to use a single timer
@@ -473,13 +473,13 @@ export const sequential = (a) => (action) => {
       };
 
       // TODO slightly inefficient
-      // TODO is this needed to prevent a memory leak of `a` ?
+      // TODO is this needed to prevent a memory leak of `t` ?
       (function () {
-        const a = run(a[i], onSuccess, action.error, action.cancel);
+        const t = run(a[i], onSuccess, action.error, action.cancel);
 
         action.onTerminate = () => {
           terminated = true;
-          a.terminate();
+          t.terminate();
         };
       })();
 

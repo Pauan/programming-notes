@@ -5,13 +5,13 @@
 
 (TYPE (Stream A))
 
-(EXPORT { stream/fixed = stream_fixed
-          stream/sliding = stream_sliding
-          stream/dropping = stream_dropping
+(EXPORT { stream-fixed = stream_fixed
+          stream-sliding = stream_sliding
+          stream-dropping = stream_dropping
           peek
           pull! = pull
           push! = push
-          stream/close! = close }
+          stream-close! = close }
 
   (FFI-IMPORT "FFI/Stream"
     (stream_fixed :: (FORALL A
@@ -39,52 +39,30 @@
   (stream :: (FORALL A
                (-> (Task (Stream A)))))
   (stream)
-    (stream/fixed 5))
+    (stream-fixed 5))
+
+(MACRO
+  (W/STREAM @args body
+    (LET body = `(on-cancel ,body
+                   (-> _ void)
+                   void)
+      (foldr args body -> `(,name = ,stream) old
+        (W/UNIQ u
+          `(W/RESOURCE ,u = ,stream
+             (LET ,name = ,u
+               ,old)
+             (stream-close! ,u)))))))
+
 
 (FUNCTION
-  (w/stream :: (FORALL A
-                 (-> (Task A)
-                     (Task Void))))
-  (w/stream task)
-    (on-cancel task
-      (-> _ void)
-      void))
-
-(FUNCTION
-  (w/stream-close! :: (FORALL A B
-                        (-> (Stream A)
-                            (Task B)
-                            (Task Void))))
-  (w/stream-close! out task)
-    # TODO if out gets closed, this may call stream/close! twice
-    # TODO what if it errors ?
-    (w/stream
-      (finally task
-               (stream/close! out))))
-
-# TODO find a better name for this
-# TODO maybe get rid of this ?
-(FUNCTION
-  (stream/generate :: (FORALL A B
-                        (-> (Stream A)
-                            (-> (Stream A) (Task B))
-                            (Task (Stream A)))))
-  (stream/generate out f)
-    (DO (ignore-thread
-          (w/stream-close! out
-            (f out)))
-        (wrap out)))
-
-(FUNCTION
-  (stream/each! :: (FORALL A
+  (stream-each! :: (FORALL A
                      (-> (Stream A)
                          (-> A (Task Void))
                          (Task Void))))
-  (stream/each! in f)
-    (w/stream
-      (forever
-        (DO value = (pull! in)
-            (f value)))))
+  (stream-each! in f)
+    (forever
+      (DO value = (pull! in)
+          (f value))))
 
 (FUNCTION
   (pipe! :: (FORALL A
@@ -92,36 +70,36 @@
                   (Stream A)
                   (Task Void))))
   (pipe! from to)
-    (stream/each! from -> value
+    (stream-each! from -> value
       (push! to value)))
 
 (FUNCTION
-  (stream/merge! :: (FORALL A
+  (stream-merge! :: (FORALL A
                       (-> @(Stream A)
                          (Stream A)
                          (Task Void))))
-  (stream/merge! @in out)
+  (stream-merge! @in out)
     (ignore-concurrent
       @(map in -> in
          (pipe! in out))))
 
 (FUNCTION
-  (stream/map! :: (FORALL A B
+  (stream-map! :: (FORALL A B
                     (-> (Stream A)
                         (Stream B)
                         (-> A B)
                         (Task Void))))
-  (stream/map! in out f)
-    (stream/each! in -> value
+  (stream-map! in out f)
+    (stream-each! in -> value
       (push! out (f value))))
 
 (FUNCTION
-  (stream/foldl! :: (FORALL A B
+  (stream-foldl! :: (FORALL A B
                       (-> A
                           (Stream B)
                           (-> A B (Task A))
                           (Task A))))
-  (stream/foldl! init in f)
+  (stream-foldl! init in f)
     (LOOP next
         | old = init
       (on-cancel
@@ -131,20 +109,20 @@
         (wrap old))))
 
 (FUNCTION
-  (stream/join! :: (FORALL A
+  (stream-join! :: (FORALL A
                      (-> (Stream A) (Task A))))
-  (stream/join! in)
-    (stream/foldl! (empty) in -> old value
+  (stream-join! in)
+    (stream-foldl! (empty) in -> old value
       (concat old value)))
 
 (FUNCTION
   # TODO this type signature is probably wrong
-  (stream/flatten! :: (FORALL A B
-                        (-> (Stream (A B))
+  (stream-flatten! :: (FORALL A B
+                        (-> (Stream A)
                             (Stream B)
                             (Task Void))))
-  (stream/flatten! in out)
-    (stream/each! in -> value
+  (stream-flatten! in out)
+    (stream-each! in -> value
       (ignore-sequential
         @(map value -> value
            (push! value out)))))
@@ -154,16 +132,16 @@
 [source]
 ----
 (FUNCTION
-  (generate/add! :: (-> (Stream Integer) (Task Void)))
-  (generate/add! out)
+  (generate-add! :: (-> (Stream Integer) (Task Void)))
+  (generate-add! out)
     (LOOP next
         | i = 0
       (DO (push! out i)
           (next (add i 1)))))
 
 (FUNCTION
-  (generate/multiply! :: (-> (Stream Integer) (Task Void)))
-  (generate/multiply! out)
+  (generate-multiply! :: (-> (Stream Integer) (Task Void)))
+  (generate-multiply! out)
     (LOOP next
         | i = 1
       (DO (push! out i)
@@ -172,49 +150,34 @@
 (FUNCTION
   (accumulate :: (-> (Stream Integer) (Task Integer)))
   (accumulate in)
-    (stream/foldl! 0 in -> old value
+    (stream-foldl! 0 in -> old value
       (LET new = (add old value)
         (DO (log new)
             (wrap new)))))
 
 
-# Using threads
-(DO # Lazily generates the stream [0 1 2 3 4 ...]
-    x = (stream/generate (stream) generate-add!)
+# Using multiple streams + merge
+(W/STREAM x = (stream)
+          y = (stream)
+          z = (stream)
+
+  (ignore-concurrent
+    # Lazily generates the stream [0 1 2 3 4 ...]
+    (generate-add! x)
 
     # Lazily generates the stream [1 2 4 8 16 ...]
-    y = (stream/generate (stream) generate/multiply!)
+    (generate-multiply! y)
 
     # Merges the two streams in a non-deterministic fashion
-    z = (stream/generate (stream) -> out
-          (stream/merge! x y out))
+    (stream-merge! x y z)
 
     # Accumulates and logs the sum of the merged stream
-    (ignore
-      (accumulate z)))
-
-
-# Using concurrent
-(DO x = (stream)
-    y = (stream)
-    z = (stream)
-
-    (ignore-concurrent
-      # Lazily generates the stream [0 1 2 3 4 ...]
-      (generate-add! x)
-
-      # Lazily generates the stream [1 2 4 8 16 ...]
-      (generate-multiply! y)
-
-      # Merges the two streams in a non-deterministic fashion
-      (stream/merge! x y z)
-
-      # Accumulates and logs the sum of the merged stream
-      (accumulate z)))
+    (accumulate z)))
 
 
 # Using a single Stream
-(DO x = (stream)
+(W/STREAM x = (stream)
+
   (ignore-concurrent
     # Lazily generates the stream [0 1 2 3 4 ...]
     (generate-add! x)

@@ -1,4 +1,4 @@
-import { push, pull, close } from "../../FFI/Stream"; // "nulan:Stream"
+import { push, pull } from "../../FFI/Stream"; // "nulan:Stream"
 import { run, _finally, with_resource } from "../../FFI/Task"; // "nulan:Task"
 
 const _fs   = require("fs");
@@ -156,9 +156,7 @@ export const with_fs_open = (path, flags, f) =>
 
 export const read_file = (path, output) =>
   with_fs_open(path, "r", (fd) =>
-   _finally(read_from_Node(_fs["createReadStream"](null, { "encoding": "utf8", "fd": fd, "autoClose": false }), output),
-            // TODO maybe this shouldn't close, but should instead let the caller close it ?
-            close(output)));
+   read_from_Node(_fs["createReadStream"](null, { "encoding": "utf8", "fd": fd, "autoClose": false }), output));
 
 export const write_file = (input, path) =>
   with_fs_open(path, "w", (fd) =>

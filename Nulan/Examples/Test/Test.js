@@ -1,4 +1,4 @@
-import { _void, run_root, _bind, _finally, on_cancel, success, log, never, concurrent, thread, fastest, thread_kill, run } from "../FFI/Task";
+import { _void, run_root, _bind, _finally, on_cancel, success, log, never, concurrent, thread, fastest, thread_kill, run, with_resource } from "../FFI/Task";
 import { delay, current_time } from "../FFI/Time";
 import { push, pull, close, stream_fixed } from "../FFI/Stream";
 import { read_file, write_file, files_from_directory_recursive } from "../Node.js/FFI/fs";
@@ -25,7 +25,7 @@ const with_stream = (task) =>
   on_cancel(task, (_) => _void, _void);
 
 const stream_each = (_in, f) =>
-  with_stream(forever(_bind(pull(_in), f)));
+  forever(_bind(pull(_in), f));
 
 const stream_foldl = (init, _in, f) => {
   const next = (old) =>
@@ -36,8 +36,9 @@ const stream_foldl = (init, _in, f) => {
 };
 
 const copy_file = (from, to) =>
-  _bind(stream(), (s) =>
-    ignore_concurrent([read_file(from, s), write_file(s, to)]));
+  with_resource(stream(),
+    (s) => ignore_concurrent([read_file(from, s), write_file(s, to)]),
+    (s) => close(s));
 
 const benchmark = (task) =>
   _bind(current_time, (now) => {
@@ -135,7 +136,7 @@ const increment = (i) =>
   _bind(benchmark(copy_file("/home/pauan/Scratch/2014-09-30", "/home/pauan/Scratch/tmp/foo")), log);*/
 
 const main = () =>
-  forever(copy_file("/home/pauan/Scratch/2014-09-30", "/home/pauan/Scratch/tmp/foo"));
+  copy_file("/home/pauan/Scratch/2014-09-30", "/home/pauan/Scratch/tmp/foo");
 
 /*const main = () =>
   forever(_bind(current_time, log));*/

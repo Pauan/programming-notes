@@ -1,0 +1,62 @@
+/** @type {undefined} @const */
+var undefined;
+
+/** @const @dict */
+var console;
+
+/** @const @dict */
+var Math;
+
+/** @const @dict */
+var process;
+
+/**
+ * @constructor
+ * @param {number} length
+ * @return {!Array.<?>}
+ * @nosideeffects
+ * @dict
+ * @template T
+ */
+function Array(length) {}
+
+/**
+ * @constructor
+ * @param {string} message
+ * @return {!Error}
+ * @nosideeffects
+ */
+function Error(message) {}
+
+/** @const @constructor */
+function Promise(resolver) {}
+
+/**
+ * @param {function()} callback
+ * @return {number}
+ */
+function setImmediate(callback) {}
+
+/**
+ * @param {function()} callback
+ * @param {number} ms
+ * @return {number}
+ */
+function setInterval(callback, ms) {}
+
+/**
+ * @param {function()} callback
+ * @param {number} ms
+ * @return {number}
+ */
+function setTimeout(callback, ms) {}
+
+/**
+ * @param {number} id
+ */
+function clearInterval(id) {}
+
+/**
+ * @param {number} id
+ */
+function clearTimeout(id) {}
