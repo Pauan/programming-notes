@@ -12,10 +12,8 @@
           error
           cancel
           never
-          # TODO maybe get rid of finally ?
-          finally = _finally
           on-cancel = on_cancel
-          W/RESOURCE
+          with-resource = with_resource
           # TODO maybe rename `execute` to something else ?
           Task<- = execute
           # TODO get rid of all thread stuff ?
@@ -59,20 +57,65 @@
                     (Task B))))
 
 
-    (with_resource :: (FORALL A B
-                        (-> (Task A)
-                            (-> A (Task B))
-                            (-> A (Task Void))
-                            (Task B))))
+     "Other languages (including JavaScript) have a `try/finally` block, which
+      is used to clean up resources when you're done using them:
 
+      [source,javascript]
+      ----
+      var x = open_file(\"foo\");
 
-    "When executed, executes the first `Task`, and then executes the second
-     `Task`. The second `Task` is *always* executed, even if the first `Task`
-     returns, errors, cancels, or terminates."
-    (_finally :: (FORALL A
-                   (-> (Task A)
-                       (Task Void)
-                       (Task A))))
+      try {
+        use_file(x);
+      } finally {
+        close_file(x);
+      }
+      ----
+
+      In Nulan, the above code example would be written like this:
+
+      [source,nulan]
+      ----
+      (with-resource (open-file \"foo\")
+        (-> x
+          (close-file x))
+        (-> x cleanup
+          (cleanup (use-file x))))
+      ----
+
+      You can also write it in a shorter form:
+
+      [source,nulan]
+      ----
+      (with-resource (open-file \"foo\") close-file -> x cleanup
+        (cleanup (use-file x)))
+      ----
+
+      The `with-resource` function guarantees that the file will always be
+      closed, even if an error, cancellation, or termination occurs.
+
+      In order to fulfill this guarantee, the `Task`s `(open-file \"foo\")`
+      and `(close-file x)` are always executed, even if they are terminated.
+
+      One major difference from JavaScript is the `cleanup` function. It takes
+      in a `Task` as its argument, and will first execute that `Task`, and
+      then afterwards will execute `(close-file x)`.
+
+      The reason for the cleanup function is so that resources can be cleaned
+      up even when using threads:
+
+      [source,nulan]
+      ----
+      (with-resource (open-file \"foo\") close-file -> x cleanup
+        (ignore-thread
+          (cleanup (use-file x))))
+      ----
+
+      The above code creates a new thread, and when `(use-file x)` is
+      finished, it will close the file."
+    (with_resource :: (-> (Task a)
+                          (-> a (Task Void))
+                          (-> a (-> (Task b) (Task b)) (Task c))
+                          (Task c)))
 
 
     "When executed, executes the first `Task`.
@@ -416,31 +459,6 @@
     (FFI-PROGRAM-START)
       `(run_root ,(symbol "main")))
 
-  (MACRO
-    "When executed, executes the first `Task`, binding the return value to a
-     variable. Then the second `Task` is executed, and afterwards the third
-     `Task` is executed. The third `Task` is *always* executed, even if the
-     second `Task` returns, errors, cancels, or terminates. If the second
-     `Task` returns, then that is the final return value.
-
-     This is very useful for initializing a resource, using the resource, and
-     then cleaning up the resource:
-
-     [source,nulan]
-     ----
-     (W/RESOURCE x = (open-file \"foo\")
-       (use-file x)
-       (close-file x))
-     ----
-
-     If you had used `DO` and `finally`, then the file may end up leaking,
-     but by using `W/RESOURCE` you guarantee that the file will *always* be
-     closed."
-    (W/RESOURCE `(,name = ,before) during after)
-      `(with_resource ,before
-         (-> ,name ,during)
-         (-> ,name ,after)))
-
   (IMPLEMENT Task
     "When executed, returns its argument."
     (wrap x)
@@ -462,15 +480,13 @@
 
    This is useful when you want to execute a `Task` in a new thread, and
    guarantee that the `Thread` will get cleaned up no matter what happens."
-  (w/thread :: (FORALL A B
-                 (-> (Task A)
-                     (-> (Thread A) (Task B))
-                     (Task B))))
-  (w/thread task f)
-    # TODO does this leak? should it use W/RESOURCE instead ?
-    (DO t = (thread task)
-      (finally (f t)
-               (thread-kill! t))))
+  (with-thread :: (FORALL A B
+                    (-> (Task A)
+                        (-> (Thread A) (Task B))
+                        (Task B))))
+  (with-thread task f)
+    (with-resource (thread task) thread-kill! -> t cleanup
+      (cleanup (f t))))
 
 (FUNCTION
   "When executed, executes the `Task`.

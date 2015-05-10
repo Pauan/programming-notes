@@ -1,5 +1,5 @@
 import { Queue, array_remove } from "./Util";
-import { _bind, thread, success, _finally } from "./Task";
+import { _bind, thread, success, with_resource } from "./Task";
 
 
 const cancel = (action) => {
@@ -160,24 +160,31 @@ class Stream {
 }
 
 
-export const stream = (f) => (action) => {
+const make_stream = (action) => {
   // TODO is this a good number for the buffer ?
-  const stream = new Stream(1);
-
-  // TODO I'm pretty sure this will never happen
-  action.onTerminate = () => {
-    // TODO is this correct ?
-    stream.close(action);
-  };
-
-  const run_f = _finally(f((value) => (action) => {
-    stream.push(action, value);
-  }), (action) => {
-    stream.close(action);
-  });
-
-  _bind(thread(run_f), (_) => success(stream))(action);
+  action.success(new Stream(1));
 };
+
+const close = (stream) => (action) => {
+  stream.close(action);
+};
+
+/*
+Equivalent to this Nulan code:
+
+  (with-resource make_stream close -> stream cleanup
+    (DO (ignore-thread
+          (cleanup (f -> value
+                     (push stream value))))
+        (wrap stream)))
+*/
+export const stream = (f) =>
+  with_resource(make_stream, close, (stream, cleanup) => {
+    const push = (value) => (action) => {
+      stream.push(action, value);
+    };
+    return _bind(thread(cleanup(f(push))), (_) => success(stream));
+  });
 
 export const peek = (stream) => (action) => {
   stream.peek(action);

@@ -339,7 +339,7 @@ export const _bind = (task, f) => (action) => {
 };
 
 // TODO test this
-export const with_resource = (before, during, after) => (action) => {
+export const with_resource = (before, after, during) => (action) => {
   let terminated = false;
 
   // This is always run, even if it's terminated
@@ -353,8 +353,9 @@ export const with_resource = (before, during, after) => (action) => {
       run(after(value), noop, action.error, action.cancel);
 
     } else {
+      // TODO what if `during` errors or cancels ?
       // There's no need to create a new action for this, so we just use the existing one
-      _finally(during(value), after(value))(action);
+      during(value, (task) => _finally(task, after(value)))(action);
     }
   }, action.error, action.cancel);
 
@@ -363,7 +364,7 @@ export const with_resource = (before, during, after) => (action) => {
   };
 };
 
-export const _finally = (before, after) => (action) => {
+const _finally = (before, after) => (action) => {
   const onSuccess = (value) => {
     // TODO is this necessary to prevent a memory leak ?
     action.onTerminate = null;

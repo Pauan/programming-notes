@@ -5,7 +5,7 @@
 (USE {} = "nulan:Stream")
 
 
-(EXPORT { read-file! = read_file
+(EXPORT { read-file = read_file
           write-file! = write_file
           rename-file! = rename_file
           symlink!
@@ -18,9 +18,9 @@
           files-from-directory-recursive = files_from_directory_recursive }
 
   (FFI-IMPORT "fs"
-    (read_file :: (-> String (Stream String) (Task Void)))
+    (read_file :: (-> String (Task (Stream String))))
 
-    (write_file :: (-> (Stream String) String (Task Void)))
+    (write_file :: (-> String (Stream String) (Task Void)))
 
     (rename_file :: (-> String String (Task Void)))
 
@@ -41,16 +41,15 @@
     (files_from_directory_recursive :: (-> String (Task (List String))))))
 
 
-# TODO maybe allow for passing in a stream which will be used instead of creating a new one?
 # TODO store to a temporary file so that it will work even if `from` and `to` are the same ?
 (FUNCTION
-  (copy-file :: (-> String String (Stream Void Void)))
+  (copy-file :: (-> String String (Task Void)))
   (copy-file from to)
     # TODO should this use real-path or path-normalize ?
     (DO from = (real-path from)
         to   = (real-path to)
       (IF (equal? from to)
         (error (STRING "Cannot read and write to the same file: @" from))
-        (pipe (read-file from)
-              (write-file to)))))
+        (DO s = (read-file from)
+            (write-file! to s)))))
 ----

@@ -1,5 +1,5 @@
-import { push, pull } from "../../FFI/Stream"; // "nulan:Stream"
-import { run, _finally, with_resource } from "../../FFI/Task"; // "nulan:Task"
+import { stream, pull } from "../../FFI/Stream"; // "nulan:Stream"
+import { run, with_resource } from "../../FFI/Task"; // "nulan:Task"
 
 const _fs   = require("fs");
 const _path = require("path");
@@ -14,7 +14,9 @@ export const callback = (action) => (err, value) => {
 };
 
 
-export const read_from_Node = (input, output) => (action) => {
+export const read_from_Node = (fd, push) => (action) => {
+  const input = _fs["createReadStream"](null, { "encoding": "utf8", "fd": fd, "autoClose": false });
+
   let finished = false;
 
   const cleanup = () => {
@@ -40,6 +42,11 @@ export const read_from_Node = (input, output) => (action) => {
     action.error(e);
   };
 
+  const onCancel = () => {
+    cleanup();
+    action.cancel();
+  };
+
   const onReadable = () => {
     // TODO is this correct ?
     if (!finished) {
@@ -47,8 +54,7 @@ export const read_from_Node = (input, output) => (action) => {
       const chunk = input["read"]();
       if (chunk !== null) {
         // TODO is it possible for a "readable" event to trigger even if `chunk` is not `null` ?
-        // TODO is it possible for onEnd to be called after the Stream is closed, and thus double-close it ?
-        const t = run(push(output, chunk), onReadable, onError, onEnd);
+        const t = run(push(chunk), onReadable, onError, onCancel);
 
         action.onTerminate = () => {
           cleanup();
@@ -67,7 +73,9 @@ export const read_from_Node = (input, output) => (action) => {
   onReadable();
 };
 
-export const write_to_Node = (input, output) => (action) => {
+export const write_to_Node = (fd, input) => (action) => {
+  const output = _fs["createWriteStream"](null, { "encoding": "utf8", "fd": fd, "autoClose": false });
+
   let finished = false;
 
   // TODO only call this once ?
@@ -137,6 +145,7 @@ export const write_to_Node = (input, output) => (action) => {
   // `fs.createWriteStream`, we instead have to set this to prevent
   // Node.js from closing the file descriptor
   // TODO this fix might no longer work in future versions of Node.js
+  // TODO https://github.com/joyent/node/issues/20880
   output["closed"] = true;
 
   onDrain();
@@ -151,16 +160,13 @@ const fs_open = (path, flags) => (action) => {
   _fs["open"](path, flags, callback(action));
 };
 
-export const with_fs_open = (path, flags, f) =>
-  with_resource(fs_open(path, flags), f, fs_close);
+export const read_file = (path) =>
+  with_resource(fs_open(path, "r"), fs_close,
+    (fd, cleanup) => stream((push) => cleanup(read_from_Node(fd, push))));
 
-export const read_file = (path, output) =>
-  with_fs_open(path, "r", (fd) =>
-   read_from_Node(_fs["createReadStream"](null, { "encoding": "utf8", "fd": fd, "autoClose": false }), output));
-
-export const write_file = (input, path) =>
-  with_fs_open(path, "w", (fd) =>
-    write_to_Node(input, _fs["createWriteStream"](null, { "encoding": "utf8", "fd": fd })));
+export const write_file = (path, input) =>
+  with_resource(fs_open(path, "w"), fs_close,
+    (fd, cleanup) => cleanup(write_to_Node(fd, input)));
 
 export const rename_file = (from, to) => (action) => {
   _fs["rename"](from, to, callback(action));
