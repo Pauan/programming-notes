@@ -524,4 +524,21 @@
                       (-> (Task A) (Task Void))))
   (ignore-thread task)
     (ignore (thread task)))
+
+(FUNCTION
+  "When executed, executes the `Task`.
+
+   If the `Task` succeeds, return `Void`.
+
+   If the `Task` cancels, return `Void`.
+
+   ''''
+
+   This is useful if you want to execute a `Task`, but want to ignore
+   cancellations."
+  (ignore-cancel :: (-> (Task Void) (Task Void)))
+  (ignore-cancel x)
+    (on-cancel x
+      (-> _ void)
+      void))
 ----

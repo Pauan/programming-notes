@@ -16,6 +16,10 @@ export const print_error = (e) => {
   console["error"](error_stack(e));
 };
 
+export const print_warning = (s) => {
+  console["warn"](s);
+};
+
 
 // This is significantly faster than using Array.prototype.reverse
 // http://jsperf.com/array-reverse-function

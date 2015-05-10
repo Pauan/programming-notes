@@ -1,4 +1,4 @@
-import { array_remove, async, error_stack, fatal_error, print_error } from "./Util";
+import { array_remove, async, error_stack, fatal_error, print_error, print_warning } from "./Util";
 
 
 let RUNNING_TASKS = 0;
@@ -152,6 +152,7 @@ class Thread {
     }, () => {
       if (this._state === PENDING) {
         this._cancel(CANCELLED);
+        print_warning("thread was cancelled");
       }
     });
   }
@@ -240,30 +241,47 @@ export const Promise_from_Task = (task) =>
     run(task, resolve, reject, reject);
   });
 
+
 // TODO does this work properly in all platforms ?
 const MAX_TIMER = Math["pow"](2, 31) - 1;
 
+let block_timer = null;
+let block_timer_count = 0;
+
+const block_task = (action) => {
+  --block_timer_count;
+
+  if (block_timer_count === 0) {
+    clearInterval(block_timer);
+    block_timer = null;
+  }
+
+  action.success(undefined);
+};
+
 // TODO test this
-// TODO it creates a new timer for each Thread, it would be better to use a single timer
 export const block = () => {
   // This is necessary to prevent Node.js from exiting before the tasks are complete
   // TODO is there a more efficient way to do this ?
   // TODO maybe only do this on Node.js ?
   // TODO maybe provide a way to disable this ?
-  // TODO test this
-  const timer = setInterval(noop, MAX_TIMER);
+  if (block_timer === null) {
+    block_timer = setInterval(noop, MAX_TIMER);
+  }
 
-  return (action) => {
-    clearInterval(timer);
-    action.success(undefined);
-  };
+  ++block_timer_count;
+
+  return block_task;
 };
+
 
 export const run_root = (f) => {
   // TODO I'd like to use `execute`, but I can't, because `f` returns a `Task`, so I'd have to double-run it
   try {
     // TODO is it inefficient to use _finally here ?
-    run(_finally(f(), block()), noop, print_error, noop);
+    run(_finally(f(), block()), noop, print_error, () => {
+      print_warning("main task was cancelled");
+    });
   } catch (e) {
     print_error(e);
   }
@@ -361,6 +379,7 @@ export const _finally = (before, after) => (action) => {
     action.onTerminate = null;
 
     // Errors have precedence over cancellations
+    // TODO should errors have precedence over cancellations ?
     const propagate = () => {
       action.error(e);
     };

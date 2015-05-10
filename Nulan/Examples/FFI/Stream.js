@@ -1,19 +1,18 @@
 import { Queue, array_remove } from "./Util";
+import { _bind, thread, success, _finally } from "./Task";
 
 
-const check_length = (i) => {
-  // TODO should we allow for a buffer of size 0 ?
-  if (i >= 1) {
-    return true;
-  } else {
-    throw new Error("Expected 1 or greater but got " + i);
-  }
+const cancel = (action) => {
+  action.cancel();
 };
 
 const closed_peek = function (action) {
   if (this._buffer.length) {
     action.success(this._buffer.peek());
   } else {
+    this._buffer = null;
+    this.peek = cancel;
+    this.pull = cancel;
     action.cancel();
   }
 };
@@ -22,38 +21,47 @@ const closed_pull = function (action) {
   if (this._buffer.length) {
     action.success(this._buffer.pull());
   } else {
+    this._buffer = null;
+    this.peek = cancel;
+    this.pull = cancel;
     action.cancel();
   }
 };
 
 const closed_push = (action, value) => {
-  action.cancel();
+  action.error(new Error("Cannot push: stream is closed"));
 };
 
 const closed_close = (action) => {
-  // TODO is this correct ? maybe it should simply do nothing if you close a Stream multiple times
   action.error(new Error("Cannot close: stream is already closed"));
 };
 
 
-class StreamBase {
+class Stream {
   constructor(limit) {
     this._limit = limit;
     this._pullers = []; // TODO maybe use a Queue ?
+    this._pushers = []; // TODO maybe use a Queue ?
     this._buffer = new Queue();
   }
 
   cleanup() {
-    const a = this._pullers;
+    const a1 = this._pullers;
+    const a2 = this._pushers;
 
     this._limit = null;
     this._pullers = null;
+    this._pushers = null;
 
     // TODO is it faster to use var or let ?
     // This cancels any pending peek/pull
     // This only happens if the buffer is empty
-    for (let i = 0; i < a["length"]; ++i) {
-      a[i].action.cancel();
+    for (let i = 0; i < a1["length"]; ++i) {
+      a1[i].action.cancel();
+    }
+
+    if (a2["length"] !== 0) {
+      throw new Error("Invalid: expected 0 pushers but got " + a2["length"]);
     }
   }
 
@@ -65,8 +73,6 @@ class StreamBase {
 
     // TODO is this executed in the right order ?
     this.cleanup();
-
-    // TODO should this cancel ?
     action.success(undefined);
   }
 
@@ -90,9 +96,20 @@ class StreamBase {
   }
 
   pull(action) {
+    // If there is stuff in the buffer
     if (this._buffer.length) {
-      action.success(this._buffer.pull());
+      const value = this._buffer.pull();
 
+      // If there is a pending push
+      if (this._pushers["length"]) {
+        const f = this._pushers["shift"]();
+        this._buffer.push(f.value);
+        f.action.success(undefined);
+      }
+
+      action.success(value);
+
+    // Buffer is empty, wait for push
     } else {
       const info = {
         push: false,
@@ -127,110 +144,39 @@ class StreamBase {
 
     // Buffer is full
     } else {
-      this.full(action, value);
-    }
-  }
-}
-
-
-class StreamFixed extends StreamBase {
-  constructor(limit) {
-    super(limit);
-    this._pushers = []; // TODO maybe use a Queue ?
-  }
-
-  cleanup() {
-    super.cleanup();
-
-    const a = this._pushers;
-
-    this._pushers = null;
-
-    // TODO is it faster to use var or let ?
-    for (let i = 0; i < a["length"]; ++i) {
-      a[i].action.cancel();
-    }
-  }
-
-  pull(action) {
-    // If there is stuff in the buffer
-    if (this._buffer.length) {
-      const value = this._buffer.pull();
-
-      // If there is a pending push
-      if (this._pushers["length"]) {
-        const f = this._pushers["shift"]();
-        this._buffer.push(f.value);
-        f.action.success(undefined);
-      }
-
-      action.success(value);
-
-    // Buffer is empty, wait for push
-    } else {
       const info = {
-        push: false,
+        value: value,
         action: action
       };
 
-      this._pullers["push"](info);
+      this._pushers["push"](info);
 
       action.onTerminate = () => {
-        // TODO is it possible for `this._pullers` to be `null` ?
-        array_remove(this._pullers, info);
+        // TODO is it possible for `this._pushers` to be `null` ?
+        array_remove(this._pushers, info);
       };
     }
   }
-
-  full(action, value) {
-    const info = {
-      value: value,
-      action: action
-    };
-
-    this._pushers["push"](info);
-
-    action.onTerminate = () => {
-      // TODO is it possible for `this._pushers` to be `null` ?
-      array_remove(this._pushers, info);
-    };
-  }
 }
 
 
-class StreamSliding extends StreamBase {
-  full(action, value) {
-    // TODO more efficient function for this
-    this._buffer.pull();
-    this._buffer.push(value);
-    action.success(undefined);
-  }
-}
+export const stream = (f) => (action) => {
+  // TODO is this a good number for the buffer ?
+  const stream = new Stream(1);
 
+  // TODO I'm pretty sure this will never happen
+  action.onTerminate = () => {
+    // TODO is this correct ?
+    stream.close(action);
+  };
 
-class StreamDropping extends StreamBase {
-  full(action, value) {
-    action.success(undefined);
-  }
-}
+  const run_f = _finally(f((value) => (action) => {
+    stream.push(action, value);
+  }), (action) => {
+    stream.close(action);
+  });
 
-
-export const stream_fixed = (i) => (action) => {
-  if (check_length(i)) {
-    action.success(new StreamFixed(i));
-  }
-};
-
-export const stream_sliding = (i) => (action) => {
-  if (check_length(i)) {
-    action.success(new StreamSliding(i));
-  }
-};
-
-export const stream_dropping = (i) => (action) => {
-  if (check_length(i)) {
-    action.success(new StreamDropping(i));
-  }
+  _bind(thread(run_f), (_) => success(stream))(action);
 };
 
 export const peek = (stream) => (action) => {
@@ -239,12 +185,4 @@ export const peek = (stream) => (action) => {
 
 export const pull = (stream) => (action) => {
   stream.pull(action);
-};
-
-export const push = (stream, value) => (action) => {
-  stream.push(action, value);
-};
-
-export const close = (stream) => (action) => {
-  stream.close(action);
 };
