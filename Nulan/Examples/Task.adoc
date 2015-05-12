@@ -13,13 +13,8 @@
           cancel
           never
           on-cancel = on_cancel
-          with-resource = with_resource
           # TODO maybe rename `execute` to something else ?
           Task<- = execute
-          # TODO get rid of all thread stuff ?
-          thread
-          thread-wait = thread_wait
-          thread-kill! = thread_kill
           sequential
           concurrent
           fastest
@@ -55,67 +50,6 @@
                 (-> (Task A)
                     (-> A (Task B))
                     (Task B))))
-
-
-     "Other languages (including JavaScript) have a `try/finally` block, which
-      is used to clean up resources when you're done using them:
-
-      [source,javascript]
-      ----
-      var x = open_file(\"foo\");
-
-      try {
-        use_file(x);
-      } finally {
-        close_file(x);
-      }
-      ----
-
-      In Nulan, the above code example would be written like this:
-
-      [source,nulan]
-      ----
-      (with-resource (open-file \"foo\")
-        (-> x
-          (close-file x))
-        (-> x cleanup
-          (cleanup (use-file x))))
-      ----
-
-      You can also write it in a shorter form:
-
-      [source,nulan]
-      ----
-      (with-resource (open-file \"foo\") close-file -> x cleanup
-        (cleanup (use-file x)))
-      ----
-
-      The `with-resource` function guarantees that the file will always be
-      closed, even if an error, cancellation, or termination occurs.
-
-      In order to fulfill this guarantee, the `Task`s `(open-file \"foo\")`
-      and `(close-file x)` are always executed, even if they are terminated.
-
-      One major difference from JavaScript is the `cleanup` function. It takes
-      in a `Task` as its argument, and will first execute that `Task`, and
-      then afterwards will execute `(close-file x)`.
-
-      The reason for the cleanup function is so that resources can be cleaned
-      up even when using threads:
-
-      [source,nulan]
-      ----
-      (with-resource (open-file \"foo\") close-file -> x cleanup
-        (ignore-thread
-          (cleanup (use-file x))))
-      ----
-
-      The above code creates a new thread, and when `(use-file x)` is
-      finished, it will close the file."
-    (with_resource :: (-> (Task a)
-                          (-> a (Task Void))
-                          (-> a (-> (Task b) (Task b)) (Task c))
-                          (Task c)))
 
 
     "When executed, executes the first `Task`.
@@ -173,132 +107,6 @@
                   (-> (-> A) (Task A))))
 
 
-    "When executed, starts executing the `Task` in a new thread, then
-     immediately returns the `Thread`.
-
-     Any errors are logged to the console.
-
-     ''''
-
-     That means that the `Task` will execute in parallel with all other
-     `Task`s in the program:
-
-     [source,nulan]
-     ----
-     # This will simultaneously log both 1 and 2
-     (DO (ignore-thread (forever (log "1")))
-         (ignore-thread (forever (log "2"))))
-     ----
-
-     Sometimes that is exactly what you want, but you should use `thread`
-     sparingly: `Task`s executing simultaneously at arbitrary times can make
-     your program much more difficult to understand.
-
-     Instead, consider using `concurrent` or `fastest`, which are much easier
-     to understand. Using `concurrent` or `fastest` also handles errors better
-     than `thread`.
-
-     So, when should you use `thread`? Well, basically, whenever `concurrent`
-     and `fastest` don't work for what you're trying to do.
-
-     But perhaps you can find an alternate way of writing your program that
-     _does_ work with `concurrent` or `fastest`."
-    (thread :: (FORALL A
-                 (-> (Task A) (Thread A))))
-
-
-    "When executed, waits for the `Thread` to finish, then returns the value
-     of the `Thread`.
-
-     ''''
-
-     When a `Task` is executed in a new thread using `thread`, it will execute
-     in parallel with all other `Task`s. That means you can no longer get the
-     return value of that `Task`.
-
-     But by using `thread-wait`, you can wait for a `Thread` to finish, so
-     that you can get the return value of the `Task`:
-
-     [source,nulan]
-     ----
-     (DO t = (thread (foo))
-         # Waits for the thread to finish,
-         # then returns the value of (foo)
-         (thread-wait t))
-     ----
-
-     Of course, in the above example it would have been better to just use
-     `(foo)` directly, and not use `thread` at all. It becomes more
-     useful when using multiple threads:
-
-     [source,nulan]
-     ----
-     (DO t1 = (thread (foo))
-         t2 = (thread (bar))
-         v1 = (thread-wait t1)
-         v2 = (thread-wait t2)
-         (qux v1 v2))
-     ----
-
-     The above code will execute `(foo)` and `(bar)` in parallel, then wait
-     for both to complete, and then call `qux` with the return value of
-     `(foo)` and `(bar)`.
-
-     However, the above example can instead be written using `concurrent`,
-     which is more concise, more efficient, and handles errors better than
-     `thread`:
-
-     [source,nulan]
-     ----
-     (DO (list v1 v2) = (concurrent (foo) (bar))
-         (qux v1 v2))
-     ----
-
-     So you should prefer using `concurrent` rather than `thread-wait`,
-     whenever you can."
-    (thread_wait :: (FORALL A
-                      (-> (Thread A) (Task A))))
-
-
-    "When executed, kills the `Thread`, terminating any partially-complete
-     computations.
-
-     It will try to stop the computations as soon as possible, but they might
-     not be stopped immediately. And in some unusual circumstances, some
-     computations may still occur even after the `Thread` is killed.
-
-     If the `Thread` is already finished, this has no effect.
-
-     ''''
-
-     This can be used to stop a long-running computation:
-
-     [source,nulan]
-     ----
-     (DO t = (thread (forever (log "1")))
-         (delay 2000)
-         (thread-kill! t))
-     ----
-
-     The above code will log `"1"` to the console forever, but after `2000`
-     milliseconds, it will kill the `Thread`, causing it to stop logging.
-
-     However, the above example can instead be written using `fastest`, which
-     is more concise, more efficient, and handles errors better than `thread`:
-
-     [source,nulan]
-     ----
-     (fastest
-       (forever (log "1"))
-       (delay 2000))
-     ----
-
-     So you should prefer using `fastest` rather than `thread-kill!`, whenever
-     you can."
-    (thread_kill :: (FORALL A
-                      (-> (Thread A) (Task Void))))
-
-
     "When executed, executes all the `Task`s in the `List`, one at a time,
      from left to right, then returns a `List` of the return values of the
      `Task`s.
@@ -339,52 +147,32 @@
                      (-> @(Task A) (Task (List A)))))
 
 
-    "When executed, executes all the `Task`s in the `List` in parallel, and
-     when they're all finished, returns a `List` of the return values of the
-     `Task`s.
+    "When executed, executes all the `Task`s in parallel, and when they're all
+     finished, returns a `List` of the return values of the `Task`s.
 
      If any of the `Task`s errors or cancels, the remaining `Task`s are
      terminated.
 
      ''''
 
-     If you need to execute `Task`s in parallel, this is a much nicer
-     alternative to using `thread`:
+     [source,nulan]
+     ----
+     (DO (list a b c) = (concurrent (foo) (bar) (qux))
+         (corge a b c))
+     ----
+
+     The above code will execute `(foo)`, `(bar)`, and `(qux)` in parallel,
+     and when they're all finished, `a` will be the result of `(foo)`, `b`
+     will be the result of `(bar)`, and `c` will be the result of `(qux)`.
+
+     You can also pass in a `List` of `Task`s:
 
      [source,nulan]
      ----
-     (DO t1 = (thread (foo))
-         t2 = (thread (bar))
-         t3 = (thread (qux))
-         v1 = (thread-wait t1)
-         v2 = (thread-wait t2)
-         v3 = (thread-wait t3)
-         (wrap (list v1 v2 v3)))
-     ----
-
-     [source,nulan]
-     ----
-     (concurrent (foo) (bar) (qux))
-     ----
-
-     The above two code examples are equivalent: they both execute three
-     `Task`s in parallel, then waits for them all to complete, and then
-     returns a `List` with the return values.
-
-     But `concurrent` is much more concise, and more efficient too! In
-     addition, it handles errors much better than `thread`.
-
-     Also, `concurrent` accepts a `List` of `Task`s, which is much trickier
-     to do with `thread`:
-
-     [source,nulan]
-     ----
-     (concurrent @list-of-tasks)
-     ----
-
-     So you should prefer using `concurrent` rather than `thread`."
-    (concurrent :: (FORALL A
-                     (-> @(Task A) (Task (List A)))))
+     (DO (list @a) = (concurrent @list-of-tasks)
+         (corge a))
+     ----"
+    (concurrent :: (-> @(Task a) (Task (List a))))
 
 
     "When executed, executes all the `Task`s in the `List` in parallel.
@@ -396,46 +184,24 @@
 
      ''''
 
-     This is a nicer alternative to `thread-kill!`:
-
-     [source,nulan]
-     ----
-     (DO t = (thread (foo))
-         (delay 2000)
-         (thread-kill! t))
-     ----
-
-     [source,nulan]
-     ----
-     (fastest (foo) (delay 2000))
-     ----
-
-     The above two code examples are equivalent: they both execute `(foo)`,
-     and then terminates it if it takes longer than `2000` milliseconds.
-
-     But `fastest` is more concise, and more efficient too! In addition, it
-     handles errors much better than `thread`.
-
-     Also, `fastest` accepts a `List` of `Task`s, which is much trickier
-     to do with `thread`:
-
-     [source,nulan]
-     ----
-     (fastest @list-of-tasks)
-     ----
-
-     Also, `fastest` returns the value of whichever `Task` finished first,
-     which is *incredibly* hard to do with `thread`:
-
      [source,nulan]
      ----
      (DO x = (fastest (foo) (bar) (qux))
          (corge x))
      ----
 
-     So you should prefer using `fastest` rather than `thread`."
-    (fastest :: (FORALL A
-                  (-> @(Task A) (Task A))))
+     The above code executes `(foo)`, `(bar)`, and `(qux)` in parallel, and
+     when one of them finishes, `x` will be the result of whichever finished
+     first.
+
+     You can also pass in a `List` of `Task`s:
+
+     [source,nulan]
+     ----
+     (DO x = (fastest @list-of-tasks)
+         (corge x))
+     ----"
+    (fastest :: (-> @(Task a) (Task a)))
 
 
     "When executed, it will log the `String` to the console, and then returns
@@ -468,25 +234,6 @@
      the function, then returns the `Task` that the function returns."
     (bind x f)
       (_bind x f)))
-
-
-(FUNCTION
-  "When executed, executes the `Task` in a new thread, then immediately calls
-   the function with the `Thread`, then executes the `Task` that the function
-   returns. When that `Task` finishes (for any reason), it will then kill the
-   `Thread`.
-
-   ''''
-
-   This is useful when you want to execute a `Task` in a new thread, and
-   guarantee that the `Thread` will get cleaned up no matter what happens."
-  (with-thread :: (FORALL A B
-                    (-> (Task A)
-                        (-> (Thread A) (Task B))
-                        (Task B))))
-  (with-thread task f)
-    (with-resource (thread task) thread-kill! -> t cleanup
-      (cleanup (f t))))
 
 (FUNCTION
   "When executed, executes the `Task`.
@@ -533,13 +280,6 @@
                           (-> @(Task A) (Task Void))))
   (ignore-concurrent @in)
     (ignore (concurrent @in)))
-
-(FUNCTION
-  "The same as `thread`, except it returns `Void` rather than a `Thread`."
-  (ignore-thread :: (FORALL A
-                      (-> (Task A) (Task Void))))
-  (ignore-thread task)
-    (ignore (thread task)))
 
 (FUNCTION
   "When executed, executes the `Task`.
