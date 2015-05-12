@@ -116,117 +116,6 @@ export const run = (task, onSuccess, onError, onCancel) => {
 };
 
 
-// TODO is using `| 0` a good idea? is there a better way to get Chrome to treat them as a small uint ?
-const PENDING    = 0 | 0;
-const SUCCEEDED  = 1 | 0;
-const ERRORED    = 2 | 0;
-const CANCELLED  = 3 | 0;
-const TERMINATED = 4 | 0;
-
-class Thread {
-  constructor(task) {
-    this._state = PENDING;
-    this._value = null;
-    this._listeners = [];
-
-    // This is to make sure that Node.js doesn't exit until all the Tasks are done
-    this._action = run(_finally(task, block()), (value) => {
-      if (this._state === PENDING) {
-        const a = this._listeners;
-
-        this._state = SUCCEEDED;
-        this._value = value;
-        this._listeners = null;
-        this._action = null;
-
-        // TODO this can be made a bit faster
-        a["forEach"]((x) => { x.success(value) });
-      }
-
-    }, (e) => {
-      if (this._state === PENDING) {
-        this._cancel(ERRORED);
-        print_error(e);
-      }
-
-    }, () => {
-      if (this._state === PENDING) {
-        this._cancel(CANCELLED);
-        print_warning("thread was cancelled");
-      }
-    });
-  }
-
-  _cancel(new_state) {
-    const a = this._listeners;
-
-    // TODO verify that _value is null ?
-    this._state = new_state;
-    this._listeners = null;
-    this._action = null;
-
-    // TODO this can be made a bit faster
-    a["forEach"]((x) => { x.cancel() });
-  }
-
-  wait(action) {
-    switch (this._state) {
-    case PENDING:
-      this._listeners["push"](action);
-
-      // TODO test this
-      action.onTerminate = () => {
-        array_remove(this._listeners, action);
-      };
-      break;
-
-    case SUCCEEDED:
-      action.success(this._value);
-      break;
-
-    // TODO is this correct ?
-    case ERRORED:
-    case CANCELLED:
-    case TERMINATED:
-      action.cancel();
-      break;
-    }
-  }
-
-  kill(action) {
-    switch (this._state) {
-    case PENDING:
-      const t = this._action;
-      const a = this._listeners;
-
-      // TODO verify that _value is null ?
-      this._state = TERMINATED;
-      this._listeners = null;
-      this._action = null;
-
-      // TODO this can be made a bit faster
-      a["forEach"]((x) => { x.cancel() });
-
-      // TODO should this be before or after cancelling the listeners ?
-      t.terminate();
-      action.success(undefined);
-      break;
-
-    // TODO is this correct ?
-    case SUCCEEDED:
-    case ERRORED:
-    case CANCELLED:
-      action.success(undefined);
-      break;
-
-    case TERMINATED:
-      action.error(new Error("Cannot kill thread: thread is already killed"));
-      break;
-    }
-  }
-}
-
-
 export const noop = () => {};
 
 // There's no standard way to cancel/terminate a Promise
@@ -275,13 +164,19 @@ export const block = () => {
 };
 
 
+export const thread = (task) => (action) => {
+  // This is to make sure that Node.js doesn't exit until all the Tasks are done
+  // TODO is it inefficient to use _finally here ?
+  run(_finally(task, block()), noop, print_error, () => {
+    print_warning("task was cancelled");
+  });
+  action.success(undefined);
+};
+
 export const run_root = (f) => {
   // TODO I'd like to use `execute`, but I can't, because `f` returns a `Task`, so I'd have to double-run it
   try {
-    // TODO is it inefficient to use _finally here ?
-    run(_finally(f(), block()), noop, print_error, () => {
-      print_warning("main task was cancelled");
-    });
+    thread(f());
   } catch (e) {
     print_error(e);
   }
@@ -338,33 +233,7 @@ export const _bind = (task, f) => (action) => {
   })();
 };
 
-// TODO test this
-export const with_resource = (before, after, during) => (action) => {
-  let terminated = false;
-
-  // This is always run, even if it's terminated
-  run(before, (value) => {
-    action.onTerminate = null;
-
-    // TODO is this correct ?
-    if (terminated) {
-      // This is always run, even if it's terminated
-      // TODO maybe this should use `after(value)(action)` instead ?
-      run(after(value), noop, action.error, action.cancel);
-
-    } else {
-      // TODO what if `during` errors or cancels ?
-      // There's no need to create a new action for this, so we just use the existing one
-      during(value, (task) => _finally(task, after(value)))(action);
-    }
-  }, action.error, action.cancel);
-
-  action.onTerminate = () => {
-    terminated = true;
-  };
-};
-
-const _finally = (before, after) => (action) => {
+export const cleanup = (before, after) => (action) => {
   const onSuccess = (value) => {
     // TODO is this necessary to prevent a memory leak ?
     action.onTerminate = null;
@@ -452,18 +321,6 @@ export const execute = (f) => (action) => {
   } catch (e) {
     action.error(e);
   }
-};
-
-export const thread = (task) => (action) => {
-  action.success(new Thread(task));
-};
-
-export const thread_wait = (thread) => (action) => {
-  thread.wait(action);
-};
-
-export const thread_kill = (thread) => (action) => {
-  thread.kill(action);
 };
 
 export const terminateAll = (actions) => {
@@ -607,5 +464,10 @@ export const fastest = (a) => (action) => {
 // Often-used functionality
 export const log = (s) => (action) => {
   console["log"](s);
+  action.success(undefined);
+};
+
+export const warn = (s) => (action) => {
+  console["warn"](s);
   action.success(undefined);
 };
