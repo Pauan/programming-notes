@@ -1,4 +1,4 @@
-import { array_remove, async, error_stack, fatal_error, print_error, print_warning } from "./Util";
+import { array_remove, async, print_error, print_warning } from "./Util";
 
 
 let RUNNING_TASKS = 0;
@@ -7,7 +7,8 @@ let RUNNING_TASKS = 0;
 // For Node.js only
 if (typeof process === "object" && typeof process["on"] === "function") {
   process["on"]("uncaughtException", (e) => {
-    fatal_error("AN UNCAUGHT ERROR OCCURRED!\n\n" + error_stack(e));
+    print_warning("an uncaught error occurred:");
+    print_error(e);
     process["exit"](1);
   });
 
@@ -19,54 +20,50 @@ if (typeof process === "object" && typeof process["on"] === "function") {
   process["on"]("exit", () => {
     // This should never happen, it's just a sanity check, just in case
     if (RUNNING_TASKS !== 0) {
-      fatal_error("NODE.JS IS EXITING, BUT THERE ARE STILL " + RUNNING_TASKS + " TASKS PENDING!");
+      print_warning("Node.js is exiting, but there are still " + RUNNING_TASKS + " tasks pending");
     }
   });
 }
 
 
-// TODO it shouldn't allow for calling cleanup_success twice
-const cleanup_success = (value) => {};
-
-const cleanup_success_error = (value) => {
+const cleanup_success = (value) => {
   // TODO pretty printing for value
-  fatal_error("INVALID SUCCESS!\n\n" + value);
+  print_warning("action succeeded after completing: " + value);
 };
 
 const cleanup_error = (e) => {
-  fatal_error("INVALID ERROR!\n\n" + error_stack(e));
+  print_warning("action errored after completing:");
+  print_error(e);
 };
 
 const cleanup_cancel = () => {
-  fatal_error("INVALID CANCEL!");
+  print_warning("action cancelled after completing");
 };
 
 const cleanup_terminate = () => {
+  // TODO should this print only when the action is actually terminated twice ?
+  print_warning("action terminated after completing");
   return false;
 };
 
-const cleanup_terminate_error = () => {
-  fatal_error("CANNOT TERMINATE THE SAME ACTION TWICE!");
-  return false;
-};
-
-const cleanup = (action, success, terminate) => {
-  action.success = success;
+const cleanup = (action) => {
+  action.success = cleanup_success;
   action.error = cleanup_error;
   action.cancel = cleanup_cancel;
-  action.terminate = terminate;
+  action.terminate = cleanup_terminate;
   action.onTerminate = null;
 };
 
 export const run = (task, onSuccess, onError, onCancel) => {
+  console["log"](new Error("")["stack"]["split"](/\n */));
+
   ++RUNNING_TASKS;
 
   const action = {
     onTerminate: null,
 
     success: (value) => {
-      // It's okay to call terminate after success
-      cleanup(action, cleanup_success_error, cleanup_terminate);
+      cleanup(action);
 
       async(() => {
         onSuccess(value);
@@ -75,8 +72,7 @@ export const run = (task, onSuccess, onError, onCancel) => {
     },
 
     error: (e) => {
-      // It's okay to call terminate after error
-      cleanup(action, cleanup_success_error, cleanup_terminate);
+      cleanup(action);
 
       async(() => {
         onError(e);
@@ -85,8 +81,7 @@ export const run = (task, onSuccess, onError, onCancel) => {
     },
 
     cancel: () => {
-      // It's okay to call terminate after cancel
-      cleanup(action, cleanup_success_error, cleanup_terminate);
+      cleanup(action);
 
       async(() => {
         onCancel();
@@ -97,7 +92,7 @@ export const run = (task, onSuccess, onError, onCancel) => {
     terminate: () => {
       const f = action.onTerminate;
 
-      cleanup(action, cleanup_success_error, cleanup_terminate_error);
+      cleanup(action);
 
       // Not every action supports termination
       if (f !== null) {
@@ -164,12 +159,14 @@ export const block = () => {
 };
 
 
+// It's not possible to terminate a thread
 export const thread = (task) => (action) => {
-  // This is to make sure that Node.js doesn't exit until all the Tasks are done
+  // It uses `block` to make sure that Node.js doesn't exit until all the Tasks are done
   // TODO is it inefficient to use _finally here ?
   run(_finally(task, block()), noop, print_error, () => {
     print_warning("task was cancelled");
   });
+
   action.success(undefined);
 };
 
@@ -468,6 +465,6 @@ export const log = (s) => (action) => {
 };
 
 export const warn = (s) => (action) => {
-  console["warn"](s);
+  print_warning(s);
   action.success(undefined);
 };
