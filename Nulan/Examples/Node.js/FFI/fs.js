@@ -1,5 +1,6 @@
-import { stream, pull } from "../../FFI/Stream"; // "nulan:Stream"
-import { run, with_resource } from "../../FFI/Task"; // "nulan:Task"
+import { make_stream, with_stream, pull, push, some, none } from "../../FFI/Stream"; // "nulan:Stream"
+import { run, protect_terminate, _finally } from "../../FFI/Task"; // "nulan:Task"
+//import { Queue } from "../../FFI/Util"; // "nulan:Util"
 
 const _fs   = require("fs");
 const _path = require("path");
@@ -14,9 +15,7 @@ export const callback = (action) => (err, value) => {
 };
 
 
-export const read_from_Node = (fd, push) => (action) => {
-  const input = _fs["createReadStream"](null, { "encoding": "utf8", "fd": fd, "autoClose": false });
-
+export const read_from_Node = (input, output) => (action) => {
   let finished = false;
 
   const cleanup = () => {
@@ -51,10 +50,11 @@ export const read_from_Node = (fd, push) => (action) => {
     // TODO is this correct ?
     if (!finished) {
       // TODO should this set a byte size for `read` ?
-      const chunk = input["read"]();
+      // TODO is this a good byte size ?
+      const chunk = input["read"](10);
       if (chunk !== null) {
         // TODO is it possible for a "readable" event to trigger even if `chunk` is not `null` ?
-        const t = run(push(chunk), onReadable, onError, onCancel);
+        const t = run(push(output, chunk), onReadable, onError, onCancel);
 
         action.onTerminate = () => {
           cleanup();
@@ -73,17 +73,19 @@ export const read_from_Node = (fd, push) => (action) => {
   onReadable();
 };
 
-export const write_to_Node = (fd, input) => (action) => {
-  const output = _fs["createWriteStream"](null, { "encoding": "utf8", "fd": fd, "autoClose": false });
+export const write_to_Node = (input, output) => (action) => {
+  let cleaned = false;
+  let closed  = false;
 
-  let finished = false;
-
-  // TODO only call this once ?
   const cleanup = () => {
-    finished = true;
-    output["removeListener"]("finish", onFinish);
-    output["removeListener"]("error", onError);
-    output["removeListener"]("drain", onDrain);
+    closed = true;
+
+    if (!cleaned) {
+      cleaned = true;
+      output["removeListener"]("finish", onFinish);
+      output["removeListener"]("error", onError);
+      output["removeListener"]("drain", onDrain);
+    }
   };
 
   action.onTerminate = () => {
@@ -96,14 +98,21 @@ export const write_to_Node = (fd, input) => (action) => {
     action.success(undefined);
   };
 
-  // TODO is this whole thing correct ?
-  const onCancel = () => {
-    // This is just in case `onFinish` gets called before `onCancel`
-    if (!finished) {
-      // We set this just in case `onDrain` ends up getting called
-      finished = true;
-      // We don't cleanup, because that's handled by `onFinish`
-      output["end"]();
+  const onSuccess = (value) => {
+    // Don't write if the Stream is ended
+    // TODO is this correct ?
+    if (!closed) {
+      if (value["length"]) {
+        if (output["write"](value[0], "utf8")) {
+          onDrain();
+        }
+
+      } else {
+        // We set this just in case `onDrain` ends up getting called
+        closed = true;
+        // We don't cleanup, because that's handled by `onFinish`
+        output["end"]();
+      }
     }
   };
 
@@ -113,17 +122,14 @@ export const write_to_Node = (fd, input) => (action) => {
     action.error(e);
   };
 
-  const onSuccess = (value) => {
-    // Don't write if the Stream is ended
-    if (!finished) {
-      if (output["write"](value, "utf8")) {
-        onDrain();
-      }
-    }
+  const onCancel = () => {
+    // TODO should this end the output ?
+    cleanup();
+    action.cancel();
   };
 
   const onDrain = () => {
-    if (!finished) {
+    if (!closed) {
       const t = run(pull(input), onSuccess, onError, onCancel);
 
       action.onTerminate = () => {
@@ -141,58 +147,157 @@ export const write_to_Node = (fd, input) => (action) => {
   output["on"]("error", onError);
   output["on"]("drain", onDrain);
 
+  onDrain();
+};
+
+
+/*const FD_QUEUE = new Queue();
+
+const FD_QUEUE_POP = () => {
+  if (FD_QUEUE.length) {
+    FD_QUEUE.pull()();
+  }
+};
+
+const FD_QUEUE_PUSH = (value) => {
+  FD_QUEUE.push(value);
+};*/
+
+const fs_close = (fd) => (action) => {
+  _fs["close"](fd, callback(action));
+
+  /*_fs["close"](fd, (err) => {
+    if (err) {
+      // TODO should it use `FD_QUEUE_POP` here ?
+      action.error(err);
+    } else {
+      FD_QUEUE_POP();
+      action.success(undefined);
+    }
+  });*/
+};
+
+const fs_open = (path, flags) => (action) => {
+  _fs["open"](path, flags, callback(action));
+
+  /*_fs["open"](path, flags, (err, fd) => {
+    if (err) {
+      // If there are too many files open, it will wait for a file to close and then try again
+      // TODO is it faster/slower to check for EMFILE, or set a hard limit ?
+      if (err["code"] === "EMFILE") {
+        FD_QUEUE_PUSH(() => {
+          fs_open(path, flags)(action);
+        });
+
+      } else {
+        action.error(err);
+      }
+
+    } else {
+      action.success(fd);
+    }
+  });*/
+};
+
+// TODO test that this handles EMFILE correctly
+const fs_readdir = (path, f) => {
+  _fs["readdir"](path, f);
+
+  /*_fs["readdir"](path, (err, files) => {
+    // TODO is this correct ?
+    FD_QUEUE_POP();
+
+    if (err) {
+      // If there are too many files open, it will wait for a file to close and then try again
+      // TODO is it faster/slower to check for EMFILE, or set a hard limit ?
+      if (err["code"] === "EMFILE") {
+        FD_QUEUE_PUSH(() => {
+          fs_readdir(path, f);
+        });
+
+      } else {
+        f(err, files);
+      }
+
+    } else {
+      f(err, files);
+    }
+  });*/
+};
+
+const fs_readStream = (fd) =>
+  _fs["createReadStream"](null, {
+    "encoding": "utf8",
+    "fd": fd,
+    "autoClose": false
+  });
+
+const fs_writeStream = (fd) => {
+  const s = _fs["createWriteStream"](null, {
+    "encoding": "utf8",
+    "fd": fd,
+    "autoClose": false
+  });
+
   // Because Node.js is stupid and doesn't have "autoClose" for
   // `fs.createWriteStream`, we instead have to set this to prevent
   // Node.js from closing the file descriptor
   // TODO this fix might no longer work in future versions of Node.js
   // TODO https://github.com/joyent/node/issues/20880
-  output["closed"] = true;
+  s["closed"] = true;
 
-  onDrain();
+  return s;
 };
 
 
-const fs_close = (fd) => (action) => {
-  _fs["close"](fd, callback(action));
-};
-
-const fs_open = (path, flags) => (action) => {
-  _fs["open"](path, flags, callback(action));
-};
+const with_fs_open = (path, flags, f) =>
+  protect_terminate(fs_open(path, flags), fs_close, (fd) =>
+    _finally(f(fd), fs_close(fd)));
 
 export const read_file = (path) =>
-  with_resource(fs_open(path, "r"), fs_close,
-    (fd, cleanup) => stream((push) => cleanup(read_from_Node(fd, push))));
+  make_stream((output) =>
+    with_fs_open(path, "r", (fd) =>
+      read_from_Node(fs_readStream(fd), output)));
+
+  /*with_fs_open(path, "r", (fd) =>
+    with_stream((push) => read_from_Node(fd, push), fs_close(fd)));*/
 
 export const write_file = (path, input) =>
-  with_resource(fs_open(path, "w"), fs_close,
-    (fd, cleanup) => cleanup(write_to_Node(fd, input)));
+  with_stream(input, some, none, (input) =>
+    with_fs_open(path, "w", (fd) =>
+      write_to_Node(input, fs_writeStream(fd))));
 
 export const rename_file = (from, to) => (action) => {
+  // TODO does this need to handle EMFILE ?
   _fs["rename"](from, to, callback(action));
 };
 
 export const symlink = (from, to) => (action) => {
+  // TODO does this need to handle EMFILE ?
   _fs["symlink"](from, to, callback(action));
 };
 
 // TODO is this necessary / useful ?
 export const real_path = (path) => (action) => {
+  // TODO does this need to handle EMFILE ?
   _fs["realpath"](path, callback(action));
 };
 
 export const remove_file = (path) => (action) => {
+  // TODO does this need to handle EMFILE ?
   _fs["unlink"](path, callback(action));
 };
 
 export const remove_directory = (path) => (action) => {
+  // TODO does this need to handle EMFILE ?
   _fs["rmdir"](path, callback(action));
 };
 
 // TODO this should probably return something indicating whether the directory
 //      already existed or not, or perhaps have another function for that ?
+// TODO does this need to handle EMFILE ?
 export const make_directory = (path) => (action) => {
-  _fs["mkdir"](path, function (err) {
+  _fs["mkdir"](path, (err) => {
     if (err) {
       if (err["code"] === "EEXIST") {
         action.success(undefined);
@@ -206,7 +311,13 @@ export const make_directory = (path) => (action) => {
 };
 
 export const files_from_directory = (path) => (action) => {
-  _fs["readdir"](path, callback(action));
+  fs_readdir(path, (err, files) => {
+    if (err) {
+      action.error(err);
+    } else {
+      action.success(files.sort());
+    }
+  });
 };
 
 // TODO is it faster or slower to use `fs.stat` to check for a directory,
@@ -218,14 +329,14 @@ export const files_from_directory_recursive = (file) => (action) => {
 
   let terminated = false;
 
-  function loop(files, parent, prefix) {
+  const loop = (files, parent, prefix) => {
     pending += files["length"];
 
-    files["forEach"](function (file) {
+    files["forEach"]((file) => {
       const new_parent = _path["join"](parent, file);
       const new_prefix = _path["join"](prefix, file);
 
-      _fs["readdir"](new_parent, function (err, files) {
+      fs_readdir(new_parent, (err, files) => {
         if (err) {
           if (err["code"] === "ENOTDIR") {
             if (!terminated) {
@@ -233,7 +344,7 @@ export const files_from_directory_recursive = (file) => (action) => {
 
               --pending;
               if (pending === 0) {
-                action.success(out);
+                action.success(out.sort());
               }
             }
 
@@ -247,9 +358,9 @@ export const files_from_directory_recursive = (file) => (action) => {
         }
       });
     });
-  }
+  };
 
-  _fs["readdir"](file, function (err, files) {
+  fs_readdir(file, (err, files) => {
     if (err) {
       action.error(err);
 

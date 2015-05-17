@@ -3,21 +3,18 @@
 ----
 (TYPE Void)
 
-(TYPE (Task Value))
+(TYPE (Task value))
 
 (EXPORT { FFI-PROGRAM-START
-          void = _void
-          error
-          cancel
-          never
-          on-cancel = on_cancel
-          # TODO maybe rename `execute` to something else ?
-          Task<- = execute
-          sequential
-          concurrent
-          fastest
-          log
-          warn }
+        | void = _void
+        | error
+        | cancel
+        | never
+        | sequential
+        | concurrent
+        | fastest
+        | log
+        | warn }
 
   (FFI-IMPORT "FFI/Task"
     _void :: (Task Void)
@@ -26,84 +23,24 @@
     (run_root :: (-> (-> (Task Void)) Void))
 
 
-    (success :: (FORALL A
-                  (-> A (Task A))))
+    (success :: (-> a (Task a)))
 
 
     "When executed, causes an error to occur."
-    (error :: (FORALL A
-                (-> String (Task A))))
+    (error :: (-> String (Task a)))
 
 
     "When executed, causes a cancellation to occur."
-    (cancel :: (FORALL A
-                 (-> (Task A))))
+    (cancel :: (-> (Task a)))
 
 
     "When executed, never returns, errors, or cancels."
-    (never :: (FORALL A
-                (-> (Task A))))
+    (never :: (-> (Task a)))
 
 
-    (_bind :: (FORALL A B
-                (-> (Task A)
-                    (-> A (Task B))
-                    (Task B))))
-
-
-    "When executed, executes the first `Task`.
-
-     If the `Task` succeeds, it will call the function with the value of the
-     `Task`, and then executes the `Task` that the function returns.
-
-     If the `Task` cancels, it will execute the second `Task`."
-    (on_cancel :: (FORALL A B
-                    (-> (Task A)
-                        (-> A (Task B))
-                        (Task B)
-                        (Task B))))
-
-
-    "When executed, calls the function.
-
-     If the function throws an exception, then that is captured and converted
-     into a `Task`.
-
-     If the function does not throw an exception, then the return value is
-     put into a `Task`.
-
-     ''''
-
-     Pure code is allowed to throw exceptions, but it's not possible to deal
-     with exceptions in pure code. By using `Task<-`, you can take a pure
-     computation (which potentially throws an exception), convert it into a
-     `Task`, and then deal with it:
-
-     [source,nulan]
-     ----
-     (DO (Task<- -> (foo))
-         (bar))
-     ----
-
-     You should use `Task<-` when you have a pure *computation* that you want
-     to convert into a `Task`.
-
-     If you already have a `Task`, then you don't need to use `Task<-`.
-
-     In addition, if you have a pure *value* that you want to convert into a
-     `Task`, you can just use `wrap` instead:
-
-     [source,nulan]
-     ----
-     (DO (wrap 5)
-         (bar))
-     ----
-
-     The only difference between `wrap` and `Task<-` is that `wrap` doesn't
-     capture thrown exceptions. So if your code doesn't throw exceptions,
-     then using `wrap` is perfectly fine."
-    (execute :: (FORALL A
-                  (-> (-> A) (Task A))))
+    (_bind :: (-> (Task a)
+                  (-> a (Task b))
+                  (Task b)))
 
 
     "When executed, executes all the `Task`s in the `List`, one at a time,
@@ -142,8 +79,7 @@
 
      With `DO`, you can only execute a fixed number of `Task`s, but with
      `sequential` you can execute a variable number of `Task`s."
-    (sequential :: (FORALL A
-                     (-> @(Task A) (Task (List A)))))
+    (sequential :: (-> @(Task a) (Task (List a))))
 
 
     "When executed, executes all the `Task`s in parallel, and when they're all
@@ -252,6 +188,22 @@
     (bind x f)
       (_bind x f)))
 
+(MACRO
+  (DO @statements last)
+    (foldr statements last -> new old
+      (MATCH new
+        `(,n = ,x)
+          `(bind ,x -> ,n ,old)
+        x
+          `(bind ,x -> (_ :: Void) ,old))))
+
+(MACRO
+  (DO-MATCH x @cases)
+    (WITH-UNIQUE u
+      `(DO ,u = ,x
+         (MATCH ,u
+           ,@cases))))
+
 (FUNCTION
   "When executed, executes the `Task`.
 
@@ -270,48 +222,27 @@
    (DO (ignore (foo))
        (bar))
    ----"
-  (ignore :: (FORALL A
-               (-> (Task A) (Task Void))))
+  (ignore :: (-> (Task a) (Task Void)))
   (ignore task)
     (DO _ = task
         void))
 
 (FUNCTION
   "When executed, executes the `Task` forever, as quickly as possible."
-  (forever :: (FORALL A
-                (-> (Task Void) (Task A))))
+  (forever :: (-> (Task Void) (Task a)))
   (forever task)
     (DO task
         (forever task)))
 
 (FUNCTION
   "The same as `sequential`, except it returns `Void` rather than a `List`."
-  (ignore-sequential :: (FORALL A
-                          (-> @(Task A) (Task Void))))
+  (ignore-sequential :: (-> @(Task a) (Task Void)))
   (ignore-sequential @in)
     (ignore (sequential @in)))
 
 (FUNCTION
   "The same as `concurrent`, except it returns `Void` rather than a `List`."
-  (ignore-concurrent :: (FORALL A
-                          (-> @(Task A) (Task Void))))
+  (ignore-concurrent :: (-> @(Task a) (Task Void)))
   (ignore-concurrent @in)
     (ignore (concurrent @in)))
-
-(FUNCTION
-  "When executed, executes the `Task`.
-
-   If the `Task` succeeds, return `Void`.
-
-   If the `Task` cancels, return `Void`.
-
-   ''''
-
-   This is useful if you want to execute a `Task`, but want to ignore
-   cancellations."
-  (ignore-cancel :: (-> (Task Void) (Task Void)))
-  (ignore-cancel x)
-    (on-cancel x
-      (-> _ void)
-      void))
 ----

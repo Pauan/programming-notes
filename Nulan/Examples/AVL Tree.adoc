@@ -9,14 +9,12 @@
   (*more))
 
 
-(INTERFACE A
-  (compare :: (-> A A Comparison)))
+(INTERFACE a
+  (compare :: (-> a a Comparison)))
 
 
 (FUNCTION
-  (more? :: (FORALL A
-              (-> A A Boolean)))
-
+  (more? :: (-> a a Boolean))
   (more? x y)
     (MATCH (compare x y)
       (*more)
@@ -26,9 +24,7 @@
 
 
 (FUNCTION
-  (less? :: (FORALL A
-              (-> A A Boolean)))
-
+  (less? :: (-> a a Boolean))
   (less? x y)
     (MATCH (compare x y)
       (*less)
@@ -38,9 +34,7 @@
 
 
 (FUNCTION
-  (equal? :: (FORALL A
-               (-> A A Boolean)))
-
+  (equal? :: (-> a a Boolean))
   (equal? x y)
     (MATCH (compare x y)
       (*equal)
@@ -55,22 +49,20 @@
 
 
 # Binary tree
-(INTERFACE A
-  (empty? :: (-> A Boolean))
-  (left :: (-> A A))
-  (right :: (-> A A))
-  (set-children :: (-> A A A A)))
+(INTERFACE a
+  (empty? :: (-> a Boolean))
+  (left :: (-> a a))
+  (right :: (-> a a))
+  (set-children :: (-> a a a a)))
 
 
 # AVL tree
-(INTERFACE A
-  (depth :: (-> A Integer)))
+(INTERFACE a
+  (depth :: (-> a Integer)))
 
 
 (FUNCTION
-  (set-balanced :: (FORALL A
-                     (-> A A A A)))
-
+  (set-balanced :: (-> a a a a))
   (set-balanced node l r)
     (LET l-depth = (depth l)
          r-depth = (depth r)
@@ -116,9 +108,7 @@
 
 
 (FUNCTION
-  (concat :: (FORALL A
-               (-> A A A)))
-
+  (concat :: (-> a a a))
   (concat x y)
     (IF (empty? x)
       y
@@ -132,9 +122,7 @@
 
 
 (FUNCTION
-  (insert-min :: (FORALL A
-                   (-> A A A)))
-
+  (insert-min :: (-> a a a))
   (insert-min node new)
     (IF (empty? node)
       new
@@ -142,32 +130,31 @@
 
 
 (FUNCTION
-  (insert-max :: (FORALL A
-                   (-> A A A)))
-
+  (insert-max :: (-> a a a))
   (insert-max node new)
     (IF (empty? node)
       new
       (set-balanced node (left node) (insert-max (right node) new))))
 
 
-(EXPORT { Dict get set remove has? dict sorted-dict }
+(EXPORT { Dict
+        | get
+        | set
+        | remove
+        | has?
+        | dict
+        | sorted-dict }
 
-  (INTERFACE A
-    (get :: (FORALL Key Value
-              (-> (A Key Value) Key (Maybe Value))))
+  (INTERFACE a
+    (get :: (-> (a key value) key (Maybe value)))
 
-    (set :: (FORALL Key Value
-              (-> (A Key Value) Key Value (A Key Value))))
+    (set :: (-> (a key value) key value (a key value)))
 
-    (remove :: (FORALL Key Value
-                 (-> (A Key Value) Key (A Key Value)))))
+    (remove :: (-> (a key value) key (a key value))))
 
 
   (FUNCTION
-    (has? :: (FORALL A Key Value
-               (-> (A Key Value) Key Boolean)))
-
+    (has? :: (-> (a key value) key Boolean))
     (has? dict key)
       (MATCH (get dict key)
         (*nothing)
@@ -177,39 +164,36 @@
           (*true)))
 
 
-  (TYPE (Sorted-Dict Key Value)
-    (*nil { sort = (-> Key Key Comparison) })
+  (TYPE (Sorted-Dict key value)
+    (*nil { sort :: (-> key key Comparison) })
 
-    (*tree { left = (Sorted-Dict Key Value)
-             right = (Sorted-Dict Key Value)
-             sort = (-> Key Key Comparison)
-             key = Key
-             value = Value
-             depth = Integer }))
+    (*tree { left :: (Sorted-Dict key value)
+           | right :: (Sorted-Dict key value)
+           | sort :: (-> key key Comparison)
+           | key :: key
+           | value :: value
+           | depth :: Integer }))
 
 
   # TODO is this valid ?
   (FUNCTION
-    (sorted-dict :: (FORALL Key Value
-                      (-> (Sorted-Dict Key Value))))
+    (sorted-dict :: (-> (Sorted-Dict key value)))
     (sorted-dict sort)
       (*nil { sort = sort }))
 
 
-  (TYPE (Dict Key Value)
-    (*dict (Sorted-Dict Key Value)))
+  (TYPE (Dict key value)
+    (*dict (Sorted-Dict key value)))
 
 
   # TODO is this valid ?
   (FUNCTION
-    (dict :: (FORALL Key Value
-               (-> (Dict Key Value))))
+    (dict :: (-> (Dict key value)))
     (dict)
       (*dict (sorted-dict compare)))
 
 
-  (IMPLEMENT (FORALL Key Value
-               (Dict Key Value))
+  (IMPLEMENT (Dict key value)
 
     (compare (*dict (*nil _)) (*dict (*nil _)))
       (*equal)
@@ -264,8 +248,7 @@
       (depth x))
 
 
-  (IMPLEMENT (FORALL Key Value
-               (Sorted-Dict Key Value))
+  (IMPLEMENT (Sorted-Dict key value)
 
     (get (*nil _) _)
       (*nothing)
@@ -284,18 +267,18 @@
 
     (set (*nil x) key value)
       (*tree { left = (*nil x)
-               right = (*nil x)
-               sort = x.sort
-               key = key
-               value = value
-               depth = 1 })
+             | right = (*nil x)
+             | sort = x.sort
+             | key = key
+             | value = value
+             | depth = 1 })
 
     (set node key value)
       (LET (*tree x) = node
         (MATCH (node.sort key x.key)
           (*equal)
-            (*tree { @x key = key
-                        value = value })
+            (*tree { @x | key = key
+                        | value = value })
 
           (*less)
             (set-balanced node
@@ -352,9 +335,9 @@
     (set-children (*tree x) l r)
       (LET d = (max (depth l)
                     (depth r))
-        (*tree { @x left  = l
-                    right = r
-                    depth = (add d 1) }))
+        (*tree { @x | left  = l
+                    | right = r
+                    | depth = (add d 1) }))
 
     (set-children (*nil _) _ _)
       (FAIL)

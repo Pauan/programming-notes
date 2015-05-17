@@ -1,6 +1,7 @@
 import { array_remove, async, print_error, print_warning } from "./Util";
 
 
+// TODO what about garbage collection ?
 let RUNNING_TASKS = 0;
 
 
@@ -55,14 +56,15 @@ const cleanup = (action) => {
 };
 
 export const run = (task, onSuccess, onError, onCancel) => {
-  console["log"](new Error("")["stack"]["split"](/\n */));
-
   ++RUNNING_TASKS;
 
   const action = {
     onTerminate: null,
 
     success: (value) => {
+      // TODO convenience function for this
+      //TASK_RUN_STACK["push"](new Error("")["stack"]["split"](/\n */)[2]);
+
       cleanup(action);
 
       async(() => {
@@ -160,27 +162,27 @@ export const block = () => {
 
 
 // It's not possible to terminate a thread
-export const thread = (task) => (action) => {
+export const run_thread = (task) => {
   // It uses `block` to make sure that Node.js doesn't exit until all the Tasks are done
   // TODO is it inefficient to use _finally here ?
   run(_finally(task, block()), noop, print_error, () => {
     print_warning("task was cancelled");
   });
-
-  action.success(undefined);
 };
 
+/*export const thread = (task) => (action) => {
+  run_thread(task);
+  action.success(undefined);
+};*/
+
 export const run_root = (f) => {
-  // TODO I'd like to use `execute`, but I can't, because `f` returns a `Task`, so I'd have to double-run it
   try {
-    thread(f());
+    run_thread(f());
   } catch (e) {
     print_error(e);
   }
 };
 
-// This can be implemented entirely with `execute`,
-// but it's faster to implement it like this
 export const success = (x) => (action) => {
   action.success(x);
 };
@@ -209,7 +211,9 @@ export const _bind = (task, f) => (action) => {
   let terminated = false;
 
   const onSuccess = (value) => {
+    // TODO is this correct ?
     if (!terminated) {
+      // TODO should this be above the `if` rather than inside it ?
       action.onTerminate = null;
 
       // Runs the task in a tail-recursive manner, so that it consumes a
@@ -230,7 +234,85 @@ export const _bind = (task, f) => (action) => {
   })();
 };
 
-export const cleanup = (before, after) => (action) => {
+/*export const always = (task) => (action) => {
+  // This is always run, even if it's terminated
+  run(task, action.success, action.error, action.cancel);
+};*/
+
+export const protect_terminate = (task, onTerminated, onSuccess) => (action) => {
+  let terminated = false;
+
+  // This is always run, even if it's terminated
+  run(task, (value) => {
+    action.onTerminate = null;
+
+    if (terminated) {
+      // This is always run, even if it's terminated
+      // TODO is it okay to call this in a tail-recursive manner ?
+      onTerminated(value)(action);
+    } else {
+      onSuccess(value)(action);
+    }
+  }, action.error, action.cancel);
+
+  action.onTerminate = () => {
+    terminated = true;
+  };
+};
+
+/*export const on_terminate = (task, onTerminated, onSuccess) => (action) => {
+  const t = run(task, (value) => {
+    action.onTerminate = null;
+    onSuccess(value)(action);
+  }, action.error, action.cancel);
+
+  action.onTerminate = () => {
+    if (t.terminate()) {
+      // This is always run, even if it's terminated
+      onTerminated(action);
+    }
+  };
+};*/
+
+/*export const on_success = (task, onSuccess, onOther) => (action) => {
+  // TODO does this reference to `t` cause a memory leak ?
+  const t = run(task, (value) => {
+    // TODO is this necessary to prevent a memory leak ?
+    action.onTerminate = null;
+
+    onSuccess(value)(action);
+
+  }, (e) => {
+    // TODO is this necessary to prevent a memory leak ?
+    action.onTerminate = null;
+
+    // Errors have precedence over cancellations
+    // TODO should errors have precedence over cancellations ?
+    const propagate = () => {
+      action.error(e);
+    };
+
+    // This task is run no matter what, even if it is terminated
+    run(onOther, propagate, action.error, propagate);
+
+  }, () => {
+    // TODO is this necessary to prevent a memory leak ?
+    action.onTerminate = null;
+
+    // This task is run no matter what, even if it is terminated
+    run(onOther, action.cancel, action.error, action.cancel);
+  });
+
+  action.onTerminate = () => {
+    if (t.terminate()) {
+      // This is always run, even if it's terminated
+      // TODO is it okay to implement this in a tail-recursive manner ?
+      onOther(action);
+    }
+  };
+};*/
+
+export const _finally = (before, after) => (action) => {
   const onSuccess = (value) => {
     // TODO is this necessary to prevent a memory leak ?
     action.onTerminate = null;
@@ -279,7 +361,18 @@ export const cleanup = (before, after) => (action) => {
   })();
 };
 
-export const on_cancel = (task, x, y) => (action) => {
+// TODO is this correct ?
+export const ignore_cancel = (task) => (action) => {
+  const t = run(task, action.success, action.error, () => {
+    action.success(undefined);
+  });
+
+  action.onTerminate = () => {
+    t.terminate();
+  };
+};
+
+/*export const on_cancel = (task, x, y) => (action) => {
   // TODO is this necessary ?
   let terminated = false;
 
@@ -310,15 +403,7 @@ export const on_cancel = (task, x, y) => (action) => {
       a.terminate();
     };
   })();
-};
-
-export const execute = (f) => (action) => {
-  try {
-    action.success(f());
-  } catch (e) {
-    action.error(e);
-  }
-};
+};*/
 
 export const terminateAll = (actions) => {
   // TODO is it faster to use a var or a let ?

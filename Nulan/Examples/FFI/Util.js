@@ -8,16 +8,12 @@ export const error_stack = (e) => {
   }
 };
 
-export const fatal_error = (s) => {
-  console["error"]("\n" + "="["repeat"](50) + "\n" + s + "\n" + "="["repeat"](50));
-};
-
 export const print_error = (e) => {
   console["error"](error_stack(e));
 };
 
 export const print_warning = (s) => {
-  console["warn"](s);
+  console["warn"]("WARNING: " + s);
 };
 
 
@@ -109,6 +105,7 @@ const nextTick = (f) => {
 const task_queue = new Queue();
 
 // Arbitrary number, just so long as it's big enough for normal use cases
+// TODO do we really need this ?
 const TASK_QUEUE_MAX_CAPACITY = 1024;
 
 let TASK_QUEUE_FLUSHING = false;
@@ -150,6 +147,7 @@ export const async = (f) => {
   task_queue.push(f);
 
   // Warn if the task queue gets too big
+  // TODO do we really need this ?
   if (task_queue.length > TASK_QUEUE_MAX_CAPACITY) {
     console["warn"]("Task queue has " + task_queue.length +
                     " items, which is greater than the max capacity of " +

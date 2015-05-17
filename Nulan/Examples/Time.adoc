@@ -5,7 +5,7 @@
 
 
 (EXPORT { delay
-          current-time = current_time }
+        | current-time = current_time }
 
   (FFI-IMPORT "FFI/Time"
     "When executed, it will wait for a certain number of milliseconds, and
@@ -30,8 +30,7 @@
 (FUNCTION
   "When executed, executes the `Task`, but if it takes longer than a certain
    number of milliseconds, the `Task` is terminated."
-  (timeout :: (FORALL A
-                (-> Integer (Task Void) (Task Void))))
+  (timeout :: (-> Integer (Task Void) (Task Void)))
   (timeout ms task)
     # TODO if it times out, maybe it should cancel rather than returning Void ?
     (fastest task (delay ms)))

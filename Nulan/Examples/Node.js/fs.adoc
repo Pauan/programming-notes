@@ -6,25 +6,25 @@
 
 
 (EXPORT { read-file = read_file
-          write-file! = write_file
-          rename-file! = rename_file
-          symlink!
-          real-path = real_path
-          remove-file! = remove_file
-          remove-directory! = remove_directory
-          make-directory! = make_directory
+        | write-file! = write_file
+        | rename-file! = rename_file
+        | symlink!
+        | real-path = real_path
+        | remove-file! = remove_file
+        | remove-directory! = remove_directory
+        | make-directory! = make_directory
           # TODO maybe use a Stream rather than a List, in case the directory is very huge ?
-          files-from-directory = files_from_directory
-          files-from-directory-recursive = files_from_directory_recursive }
+        | files-from-directory = files_from_directory
+        | files-from-directory-recursive = files_from_directory_recursive }
 
   (FFI-IMPORT "fs"
-    (read_file :: (-> String (Task (Stream String))))
+    (read_file :: (-> String (Stream String)))
 
     (write_file :: (-> String (Stream String) (Task Void)))
 
     (rename_file :: (-> String String (Task Void)))
 
-    (stat_file :: (-> String (Task Stat)))
+    #(stat_file :: (-> String (Task Stat)))
 
     (symlink :: (-> String String (Task Void)))
 
@@ -36,20 +36,35 @@
 
     (make_directory :: (-> String (Task Void)))
 
+    # Maybe return a Stream rather than a List ?
     (files_from_directory :: (-> String (Task (List String))))
 
+    # Maybe return a Stream rather than a List ?
     (files_from_directory_recursive :: (-> String (Task (List String))))))
 
 
 # TODO store to a temporary file so that it will work even if `from` and `to` are the same ?
 (FUNCTION
-  (copy-file :: (-> String String (Task Void)))
-  (copy-file from to)
+  (copy-file! :: (-> String String (Task Void)))
+  (copy-file! from to)
     # TODO should this use real-path or path-normalize ?
     (DO from = (real-path from)
         to   = (real-path to)
       (IF (equal? from to)
         (error (STRING "Cannot read and write to the same file: @" from))
-        (DO s = (read-file from)
-            (write-file! to s)))))
+        (write-file! to (read-file from)))))
+----
+
+.Examples
+[source]
+----
+# Reads the file "foo" (one line at a time),
+# then converts each line to uppercase,
+# then keeps only the lines that are equal to "TEST",
+# then writes those lines to the file "bar"
+(>> (<< (read-file "foo")
+        (split-lines)
+        (map uppercase)
+        (keep -> s (equal? s "TEST")))
+    (write-file! "bar"))
 ----

@@ -1,14 +1,14 @@
 .Maybe.nu
 [source]
 ----
-(TYPE (Maybe A)
-  (*something A)
-  (*nothing))
+(TYPE (Maybe a)
+  (*some a)
+  (*none))
 
 (FUNCTION
-  "If the first argument is `(*something foo)`, then `foo` is returned.
+  "If the first argument is `(*some foo)`, then `foo` is returned.
 
-   If the first argument is `(*nothing)`, then the second argument is
+   If the first argument is `(*none)`, then the second argument is
    returned.
 
    ''''
@@ -20,12 +20,11 @@
    # Returns the value for foo, or 0 if foo doesn't have a value
    (default foo 0)
    ----"
-  (default :: (FORALL A
-                (-> (Maybe A) A A)))
+  (default :: (-> (Maybe a) a a))
   (default x y)
     (MATCH x
-      (*something value)
+      (*some value)
         value
-      (*nothing)
+      (*none)
         y))
 ----

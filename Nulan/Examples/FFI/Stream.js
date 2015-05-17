@@ -1,88 +1,91 @@
 import { Queue, array_remove } from "./Util";
-import { _bind, thread, success, with_resource } from "./Task";
+import { run_thread, _finally, ignore_cancel } from "./Task";
 
 
-const cancel = (action) => {
-  action.cancel();
-};
-
-const closed_peek = function (action) {
-  if (this._buffer.length) {
-    action.success(this._buffer.peek());
-  } else {
-    this._buffer = null;
-    this.peek = cancel;
-    this.pull = cancel;
-    action.cancel();
-  }
-};
-
-const closed_pull = function (action) {
-  if (this._buffer.length) {
-    action.success(this._buffer.pull());
-  } else {
-    this._buffer = null;
-    this.peek = cancel;
-    this.pull = cancel;
-    action.cancel();
-  }
-};
-
-const closed_push = (action, value) => {
-  action.error(new Error("Cannot push: stream is closed"));
-};
-
-const closed_close = (action) => {
-  action.error(new Error("Cannot close: stream is already closed"));
+// TODO maybe move this into Task.js ?
+const invalid = (action) => {
+  action.error(new Error("Invalid"));
 };
 
 
 class Stream {
-  constructor(limit) {
+  constructor(limit, some, none) {
     this._limit = limit;
+    this._some = some;
+    this._none = none;
+
     this._pullers = []; // TODO maybe use a Queue ?
     this._pushers = []; // TODO maybe use a Queue ?
+    // TODO since the limit is 1, we don't really need a Queue, an Array will be faster
     this._buffer = new Queue();
   }
 
-  cleanup() {
-    const a1 = this._pullers;
-    const a2 = this._pushers;
+  done_pushing(action) {
+    if (this._pushers !== null && this._pushers["length"]) {
+      invalid(action);
 
-    this._limit = null;
-    this._pullers = null;
-    this._pushers = null;
+    } else {
+      const pullers = this._pullers;
 
-    // TODO is it faster to use var or let ?
-    // This cancels any pending peek/pull
-    // This only happens if the buffer is empty
-    for (let i = 0; i < a1["length"]; ++i) {
-      a1[i].action.cancel();
-    }
+      this._limit = null;
+      this._pullers = null;
+      this._pushers = null;
 
-    if (a2["length"] !== 0) {
-      throw new Error("Invalid: expected 0 pushers but got " + a2["length"]);
+      this.push = invalid;
+      this.done_pushing = invalid;
+
+      if (pullers !== null) {
+        // TODO is it faster to use var or let ?
+        // This cancels any pending peek/pull
+        // This only happens if the buffer is empty
+        for (let i = 0; i < pullers["length"]; ++i) {
+          pullers[i].action.success(this._none());
+        }
+      }
+
+      action.success(undefined);
     }
   }
 
-  close(action) {
-    this.peek = closed_peek;
-    this.pull = closed_pull;
-    this.push = closed_push;
-    this.close = closed_close;
+  done_pulling(action) {
+    if (this._pullers !== null && this._pullers["length"]) {
+      invalid(action);
 
-    // TODO is this executed in the right order ?
-    this.cleanup();
-    action.success(undefined);
+    } else {
+      const pushers = this._pushers;
+
+      this._limit = null;
+      this._some = null;
+      this._none = null;
+
+      this._pullers = null;
+      this._pushers = null;
+      this._buffer = null;
+
+      this.peek = invalid;
+      this.pull = invalid;
+      this.push = invalid;
+      this.done_pulling = invalid;
+
+      if (pushers !== null) {
+        // TODO is it faster to use var or let ?
+        for (let i = 0; i < pushers["length"]; ++i) {
+          pushers[i].action.cancel();
+        }
+      }
+
+      action.success(undefined);
+    }
   }
 
-  peek(action) {
-    if (this._buffer.length) {
-      action.success(this._buffer.peek());
+  wait(action, push) {
+    // Stream is closed
+    if (this._pullers === null) {
+      action.success(this._none());
 
     } else {
       const info = {
-        push: true,
+        push: push,
         action: action
       };
 
@@ -92,6 +95,15 @@ class Stream {
         // TODO is it possible for `this._pullers` to be `null` ?
         array_remove(this._pullers, info);
       };
+    }
+  }
+
+  peek(action) {
+    if (this._buffer.length) {
+      action.success(this._some(this._buffer.peek()));
+
+    } else {
+      this.wait(action, true);
     }
   }
 
@@ -100,28 +112,20 @@ class Stream {
     if (this._buffer.length) {
       const value = this._buffer.pull();
 
+      const pushers = this._pushers;
+
       // If there is a pending push
-      if (this._pushers["length"]) {
-        const f = this._pushers["shift"]();
+      if (pushers !== null && pushers["length"]) {
+        const f = pushers["shift"]();
         this._buffer.push(f.value);
         f.action.success(undefined);
       }
 
-      action.success(value);
+      action.success(this._some(value));
 
     // Buffer is empty, wait for push
     } else {
-      const info = {
-        push: false,
-        action: action
-      };
-
-      this._pullers["push"](info);
-
-      action.onTerminate = () => {
-        // TODO is it possible for `this._pullers` to be `null` ?
-        array_remove(this._pullers, info);
-      };
+      this.wait(action, false);
     }
   }
 
@@ -134,7 +138,7 @@ class Stream {
         this._buffer.push(value);
       }
 
-      f.action.success(value);
+      f.action.success(this._some(value));
       action.success(undefined);
 
     // If there is room in the buffer
@@ -160,31 +164,49 @@ class Stream {
 }
 
 
-const make_stream = (action) => {
-  // TODO is this a good number for the buffer ?
-  action.success(new Stream(1));
+export const some = (value) => [value];
+
+export const none = () => [];
+
+
+// TODO is this a good number for the buffer ?
+const DEFAULT_STREAM_LIMIT = 1;
+
+const done_pushing = (stream) => (action) => {
+  stream.done_pushing(action);
 };
 
-const close = (stream) => (action) => {
-  stream.close(action);
+const done_pulling = (stream) => (action) => {
+  stream.done_pulling(action);
 };
 
-/*
-Equivalent to this Nulan code:
+/*export const make_stream = (f) =>
+  // TODO code duplication with `with_stream`
+  protect_terminate(stream(DEFAULT_STREAM_LIMIT), close, (stream) =>
+    _bind(thread(_finally(f((value) => push(stream, value)), close(stream))), (_) =>
+      success(stream)));*/
 
-  (with-resource make_stream close -> stream cleanup
-    (DO (ignore-thread
-          (cleanup (f -> value
-                     (push stream value))))
-        (wrap stream)))
-*/
-export const stream = (f) =>
-  with_resource(make_stream, close, (stream, cleanup) => {
-    const push = (value) => (action) => {
-      stream.push(action, value);
-    };
-    return _bind(thread(cleanup(f(push))), (_) => success(stream));
-  });
+/*export const with_stream = (f, done) =>
+  protect_terminate(stream(DEFAULT_STREAM_LIMIT),
+    (stream) =>
+      // TODO is this correct ?
+      // TODO is it possible for `close` to be terminated ?
+      _finally(close(stream), done),
+    (stream) =>
+      // TODO is it possible for it to not close ?
+      _bind(thread(_finally(_finally(f((value) => push(stream, value)), close(stream)), done)), (_) =>
+        success(stream)));*/
+
+export const make_stream = (f) => f;
+
+export const with_stream = (stream, some, none, f) => (action) => {
+  const s = new Stream(DEFAULT_STREAM_LIMIT, some, none);
+
+  // TODO test ignore_cancel
+  run_thread(_finally(ignore_cancel(stream(s)), done_pushing(s)));
+
+  _finally(f(s), done_pulling(s))(action);
+};
 
 export const peek = (stream) => (action) => {
   stream.peek(action);
@@ -192,4 +214,8 @@ export const peek = (stream) => (action) => {
 
 export const pull = (stream) => (action) => {
   stream.pull(action);
+};
+
+export const push = (stream, value) => (action) => {
+  stream.push(action, value);
 };

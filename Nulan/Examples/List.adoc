@@ -8,54 +8,43 @@
 
 # TODO pattern matching on (list ...)
 (EXPORT { list
-          nth
-          nth-insert = nth_insert
-          nth-remove = nth_remove
-          nth-modify = nth_modify
-          push }
+        | nth
+        | nth-insert = nth_insert
+        | nth-remove = nth_remove
+        | nth-modify = nth_modify
+        | push }
 
   (FFI-IMPORT "FFI/List"
     # TODO this needs special compiler magic
-    (list :: (FORALL A
-               (-> @A (List A))))
+    (list :: (-> @a (List a)))
 
-    (list_slice :: (FORALL A
-                     (-> (List A) Integer Integer (List A))))
+    (list_slice :: (-> (List a) Integer Integer (List a)))
 
-    (list_length :: (FORALL A
-                      (-> (List A) Integer)))
+    (list_length :: (-> (List a) Integer))
 
-    (list_concat :: (FORALL A
-                      (-> @(List A) (List A))))
+    (list_concat :: (-> @(List a) (List a)))
 
-    (nth_get :: (FORALL A B
-                  (-> (List A) Integer (-> A B) (-> B) B)))
+    (nth_get :: (-> (List a) Integer (-> a b) (-> b) b))
 
-    (nth_insert :: (FORALL A
-                     (-> (List A) Integer A (List A))))
+    (nth_insert :: (-> (List a) Integer a (List a)))
 
-    (nth_remove :: (FORALL A
-                     (-> (List A) Integer (List A))))
+    (nth_remove :: (-> (List a) Integer (List a)))
 
-    (nth_modify :: (FORALL A
-                     (-> (List A) Integer (-> A A) (List A))))
+    (nth_modify :: (-> (List a) Integer (-> a a) (List a)))
 
     # This can be implemented with nth_insert + list_length,
     # but it's more efficient to have it be written in the FFI
-    (push :: (FORALL A
-               (-> (List A) A (List A)))))
+    (push :: (-> (List a) a (List a))))
 
 
   (FUNCTION
-    (nth :: (FORALL A
-              (-> (List A) Integer (Maybe A))))
+    (nth :: (-> (List a) Integer (Maybe a)))
     (nth l i)
       (nth_get l i *something *nothing)))
 
 
 (FUNCTION
-  (nth-set :: (FORALL A
-                (-> (List A) Integer A (List A))))
+  (nth-set :: (-> (List a) Integer a (List a)))
   (nth-set l i x)
     (nth-modify l i -> _ x))
 ----
