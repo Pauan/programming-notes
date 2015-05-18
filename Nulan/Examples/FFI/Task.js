@@ -161,14 +161,12 @@ export const block = () => {
 };
 
 
-// It's not possible to terminate a thread
-export const run_thread = (task) => {
+export const run_thread = (task) =>
   // It uses `block` to make sure that Node.js doesn't exit until all the Tasks are done
   // TODO is it inefficient to use _finally here ?
   run(_finally(task, block()), noop, print_error, () => {
     print_warning("task was cancelled");
   });
-};
 
 /*export const thread = (task) => (action) => {
   run_thread(task);
@@ -248,8 +246,7 @@ export const protect_terminate = (task, onTerminated, onSuccess) => (action) => 
 
     if (terminated) {
       // This is always run, even if it's terminated
-      // TODO is it okay to call this in a tail-recursive manner ?
-      onTerminated(value)(action);
+      run(onTerminated(value), noop, action.error, action.cancel);
     } else {
       onSuccess(value)(action);
     }

@@ -1,4 +1,4 @@
-import { _void, run_root, _bind, success, error, log, never, concurrent, fastest } from "../FFI/Task";
+import { _void, run_root, _bind, success, error, log, never, concurrent, fastest, run_thread } from "../FFI/Task";
 import { delay, current_time } from "../FFI/Time";
 import { pull, make_stream, with_stream, push, some, none } from "../FFI/Stream";
 import { read_file, write_file, files_from_directory_recursive } from "../Node.js/FFI/fs";
@@ -8,6 +8,12 @@ import { is_hidden_file } from "../Node.js/FFI/path";
 const debug = (s, x) => {
   console["log"](s);
   return x;
+};
+
+
+const thread = (task) => (action) => {
+  run_thread(task);
+  action.success(undefined);
 };
 
 
@@ -131,11 +137,43 @@ const increment = (i) =>
 
 
 /*const main = () =>
+  with_stream(make_stream((s) => push(s, 5)), some, none, (s) => _bind(delay(1000), (_) => pull(s)));*/
+
+/*const main = () =>
+  with_stream(make_stream((s) => _bind(push(s, 5), (_) => push(s, 10))), some, none, (s) => _void);*/
+
+/*const main = () =>
+  with_stream(make_stream((_) => never), some, none, (_) => _void);*/
+
+/*const main = () =>
+  with_stream(make_stream((_) => _void), some, none, (_) => never);*/
+
+/*const main = () =>
+  each(make_stream((s) => forever(push(s, 5))), (_) => _void);*/
+
+/*const main = () =>
+  with_stream(make_stream((s) => forever(push(s, 5))), some, none, (s) => {
+    const next = () =>
+      _bind(pull(s), (v) => {
+        if (v["length"]) {
+          return next();
+        } else {
+          return _void;
+        }
+      });
+    return next();
+  });*/
+
+
+//////////////////////////////////////////////////////////////////////////////
+
+
+/*const main = () =>
   each(merge([one, zero]), log);*/
 
-const main = () =>
+/*const main = () =>
   accumulate(merge([generate_add(0, 1),
-                    generate_multiply(1, 2)]));
+                    generate_multiply(1, 2)]));*/
 
 /*const main = () => _void;*/
 
@@ -173,7 +211,10 @@ const main = () =>
     forever(log("b")));*/
 
 /*const main = () =>
-  _bind(benchmark(copy_file("/home/pauan/Scratch/2014-09-30", "/home/pauan/Scratch/tmp/foo")), log);*/
+  with_stream(read_file("/home/pauan/Scratch/2014-09-30"), some, none, (_) => _void);*/
+
+const main = () =>
+  _bind(benchmark(copy_file("/home/pauan/Scratch/2014-09-30", "/home/pauan/Scratch/tmp/foo")), log);
 
 /*const main = () =>
   copy_file("/home/pauan/Scratch/2014-09-30", "/home/pauan/Scratch/tmp/foo");*/
@@ -189,11 +230,10 @@ while (i--) {
 
 const main = () => _bind(files_from_directory_recursive("/home/pauan/Downloads"), log);*/
 
-/*const s = make_stream((push) => _bind(push("5"), (_) => push("10")));
+//const s = make_stream((push) => _bind(push("5"), (_) => push("10")));
 
-const main = () =>
-  forever(_bind(s, (s) =>
-    thread(read_file("/home/pauan/Scratch/tmp/foo.js"))));*/
+/*const main = () =>
+  forever(thread(with_stream(read_file("/home/pauan/Scratch/tmp/foo.js"), some, none, (_) => _void)));*/
 
 /*const main = () =>
   forever(thread(read_file("/home/pauan/Scratch/tmp/foo.js")));*/
@@ -220,9 +260,7 @@ setTimeout(() => {
 //run(ignore(success(10))).terminate();
 
 /*const main = () =>
-  _bind(stream_fixed(5), (s) =>
-    ignore_concurrent([read_file("/home/pauan/Scratch/2014-09-30", s),
-                       stream_each(s, (x) => log(x))]));*/
+  each(read_file("/home/pauan/Scratch/2014-09-30"), log);*/
 
 /*const main = () =>
   _bind(files_from_directory_recursive("/home/pauan/Scratch"), (a) =>

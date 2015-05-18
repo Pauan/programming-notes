@@ -1,5 +1,5 @@
 import { Queue, array_remove } from "./Util";
-import { run_thread, _finally, ignore_cancel } from "./Task";
+import { run_thread, _finally } from "./Task";
 
 
 // TODO maybe move this into Task.js ?
@@ -14,6 +14,8 @@ class Stream {
     this._some = some;
     this._none = none;
 
+    this._thread = null;
+    // TODO do we need to use arrays ? is it possible for there to be more than 1 puller/pusher at a time ?
     this._pullers = []; // TODO maybe use a Queue ?
     this._pushers = []; // TODO maybe use a Queue ?
     // TODO since the limit is 1, we don't really need a Queue, an Array will be faster
@@ -21,6 +23,7 @@ class Stream {
   }
 
   done_pushing(action) {
+    // Sanity check to make sure that there aren't any pending pushes
     if (this._pushers !== null && this._pushers["length"]) {
       invalid(action);
 
@@ -28,6 +31,8 @@ class Stream {
       const pullers = this._pullers;
 
       this._limit = null;
+
+      this._thread = null;
       this._pullers = null;
       this._pushers = null;
 
@@ -48,18 +53,20 @@ class Stream {
   }
 
   done_pulling(action) {
+    // Sanity check to make sure that there aren't any pending pulls
     if (this._pullers !== null && this._pullers["length"]) {
       invalid(action);
 
     } else {
       const pushers = this._pushers;
+      const thread = this._thread;
 
       this._limit = null;
       this._some = null;
       this._none = null;
 
+      this._thread = null;
       this._pullers = null;
-      this._pushers = null;
       this._buffer = null;
 
       this.peek = invalid;
@@ -67,14 +74,19 @@ class Stream {
       this.push = invalid;
       this.done_pulling = invalid;
 
-      if (pushers !== null) {
-        // TODO is it faster to use var or let ?
-        for (let i = 0; i < pushers["length"]; ++i) {
-          pushers[i].action.cancel();
-        }
+      if (thread !== null) {
+        thread.terminate();
       }
 
-      action.success(undefined);
+      // This has to go after termination
+      this._pushers = null;
+
+      // TODO is this check a good idea ?
+      if (pushers !== null && pushers["length"]) {
+        action.error(new Error("There are still " + pushers["length"] + " pending pushes after termination"));
+      } else {
+        action.success(undefined);
+      }
     }
   }
 
@@ -156,7 +168,6 @@ class Stream {
       this._pushers["push"](info);
 
       action.onTerminate = () => {
-        // TODO is it possible for `this._pushers` to be `null` ?
         array_remove(this._pushers, info);
       };
     }
@@ -202,8 +213,7 @@ export const make_stream = (f) => f;
 export const with_stream = (stream, some, none, f) => (action) => {
   const s = new Stream(DEFAULT_STREAM_LIMIT, some, none);
 
-  // TODO test ignore_cancel
-  run_thread(_finally(ignore_cancel(stream(s)), done_pushing(s)));
+  s._thread = run_thread(_finally(stream(s), done_pushing(s)));
 
   _finally(f(s), done_pulling(s))(action);
 };

@@ -51,7 +51,7 @@ export const read_from_Node = (input, output) => (action) => {
     if (!finished) {
       // TODO should this set a byte size for `read` ?
       // TODO is this a good byte size ?
-      const chunk = input["read"](10);
+      const chunk = input["read"]();
       if (chunk !== null) {
         // TODO is it possible for a "readable" event to trigger even if `chunk` is not `null` ?
         const t = run(push(output, chunk), onReadable, onError, onCancel);
