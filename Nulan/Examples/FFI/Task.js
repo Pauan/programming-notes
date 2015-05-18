@@ -211,11 +211,6 @@ export const _bind = (task, f) => (action) => {
   })();
 };
 
-/*export const always = (task) => (action) => {
-  // This is always run, even if it's terminated
-  run(task, action.success, action.error);
-};*/
-
 export const protect_terminate = (task, onTerminated, onSuccess) => (action) => {
   let terminated = false;
 
@@ -235,58 +230,6 @@ export const protect_terminate = (task, onTerminated, onSuccess) => (action) => 
     terminated = true;
   };
 };
-
-/*export const on_terminate = (task, onTerminated, onSuccess) => (action) => {
-  const t = run(task, (value) => {
-    action.onTerminate = null;
-    onSuccess(value)(action);
-  }, action.error);
-
-  action.onTerminate = () => {
-    if (t.terminate()) {
-      // This is always run, even if it's terminated
-      onTerminated(action);
-    }
-  };
-};*/
-
-/*export const on_success = (task, onSuccess, onOther) => (action) => {
-  // TODO does this reference to `t` cause a memory leak ?
-  const t = run(task, (value) => {
-    // TODO is this necessary to prevent a memory leak ?
-    action.onTerminate = null;
-
-    onSuccess(value)(action);
-
-  }, (e) => {
-    // TODO is this necessary to prevent a memory leak ?
-    action.onTerminate = null;
-
-    // Errors have precedence over cancellations
-    // TODO should errors have precedence over cancellations ?
-    const propagate = () => {
-      action.error(e);
-    };
-
-    // This task is run no matter what, even if it is terminated
-    run(onOther, propagate, action.error, propagate);
-
-  }, () => {
-    // TODO is this necessary to prevent a memory leak ?
-    action.onTerminate = null;
-
-    // This task is run no matter what, even if it is terminated
-    run(onOther, action.cancel, action.error, action.cancel);
-  });
-
-  action.onTerminate = () => {
-    if (t.terminate()) {
-      // This is always run, even if it's terminated
-      // TODO is it okay to implement this in a tail-recursive manner ?
-      onOther(action);
-    }
-  };
-};*/
 
 export const _finally = (before, after) => (action) => {
   const onSuccess = (value) => {

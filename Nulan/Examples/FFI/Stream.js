@@ -180,7 +180,6 @@ export const some = (value) => [value];
 export const none = () => [];
 
 
-// TODO is this a good number for the buffer ?
 const DEFAULT_STREAM_LIMIT = 1;
 
 const done_pushing = (stream) => (action) => {
@@ -190,23 +189,6 @@ const done_pushing = (stream) => (action) => {
 const done_pulling = (stream) => (action) => {
   stream.done_pulling(action);
 };
-
-/*export const make_stream = (f) =>
-  // TODO code duplication with `with_stream`
-  protect_terminate(stream(DEFAULT_STREAM_LIMIT), close, (stream) =>
-    _bind(thread(_finally(f((value) => push(stream, value)), close(stream))), (_) =>
-      success(stream)));*/
-
-/*export const with_stream = (f, done) =>
-  protect_terminate(stream(DEFAULT_STREAM_LIMIT),
-    (stream) =>
-      // TODO is this correct ?
-      // TODO is it possible for `close` to be terminated ?
-      _finally(close(stream), done),
-    (stream) =>
-      // TODO is it possible for it to not close ?
-      _bind(thread(_finally(_finally(f((value) => push(stream, value)), close(stream)), done)), (_) =>
-        success(stream)));*/
 
 export const make_stream = (f) => f;
 

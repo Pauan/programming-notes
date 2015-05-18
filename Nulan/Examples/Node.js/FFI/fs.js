@@ -1,6 +1,5 @@
 import { make_stream, with_stream, pull, push, some, none } from "../../FFI/Stream"; // "nulan:Stream"
 import { run, protect_terminate, _finally } from "../../FFI/Task"; // "nulan:Task"
-//import { Queue } from "../../FFI/Util"; // "nulan:Util"
 
 const _fs   = require("fs");
 const _path = require("path");
@@ -140,78 +139,17 @@ export const write_to_Node = (input, output) => (action) => {
 };
 
 
-/*const FD_QUEUE = new Queue();
-
-const FD_QUEUE_POP = () => {
-  if (FD_QUEUE.length) {
-    FD_QUEUE.pull()();
-  }
-};
-
-const FD_QUEUE_PUSH = (value) => {
-  FD_QUEUE.push(value);
-};*/
-
 const fs_close = (fd) => (action) => {
   _fs["close"](fd, callback(action));
-
-  /*_fs["close"](fd, (err) => {
-    if (err) {
-      // TODO should it use `FD_QUEUE_POP` here ?
-      action.error(err);
-    } else {
-      FD_QUEUE_POP();
-      action.success(undefined);
-    }
-  });*/
 };
 
 const fs_open = (path, flags) => (action) => {
   _fs["open"](path, flags, callback(action));
-
-  /*_fs["open"](path, flags, (err, fd) => {
-    if (err) {
-      // If there are too many files open, it will wait for a file to close and then try again
-      // TODO is it faster/slower to check for EMFILE, or set a hard limit ?
-      if (err["code"] === "EMFILE") {
-        FD_QUEUE_PUSH(() => {
-          fs_open(path, flags)(action);
-        });
-
-      } else {
-        action.error(err);
-      }
-
-    } else {
-      action.success(fd);
-    }
-  });*/
 };
 
 // TODO test that this handles EMFILE correctly
 const fs_readdir = (path, f) => {
   _fs["readdir"](path, f);
-
-  /*_fs["readdir"](path, (err, files) => {
-    // TODO is this correct ?
-    FD_QUEUE_POP();
-
-    if (err) {
-      // If there are too many files open, it will wait for a file to close and then try again
-      // TODO is it faster/slower to check for EMFILE, or set a hard limit ?
-      if (err["code"] === "EMFILE") {
-        FD_QUEUE_PUSH(() => {
-          fs_readdir(path, f);
-        });
-
-      } else {
-        f(err, files);
-      }
-
-    } else {
-      f(err, files);
-    }
-  });*/
 };
 
 const fs_readStream = (fd) =>
@@ -247,9 +185,6 @@ export const read_file = (path) =>
   make_stream((output) =>
     with_fs_open(path, "r", (fd) =>
       read_from_Node(fs_readStream(fd), output)));
-
-  /*with_fs_open(path, "r", (fd) =>
-    with_stream((push) => read_from_Node(fd, push), fs_close(fd)));*/
 
 export const write_file = (path, input) =>
   with_stream(input, some, none, (input) =>
