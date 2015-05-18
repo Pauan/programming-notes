@@ -8,7 +8,6 @@
 (EXPORT { FFI-PROGRAM-START
         | void = _void
         | error
-        | cancel
         | never
         | sequential
         | concurrent
@@ -30,11 +29,7 @@
     (error :: (-> String (Task a)))
 
 
-    "When executed, causes a cancellation to occur."
-    (cancel :: (-> (Task a)))
-
-
-    "When executed, never returns, errors, or cancels."
+    "When executed, it never returns."
     (never :: (-> (Task a)))
 
 
@@ -85,8 +80,7 @@
     "When executed, executes all the `Task`s in parallel, and when they're all
      finished, returns a `List` of the return values of the `Task`s.
 
-     If any of the `Task`s errors or cancels, the remaining `Task`s are
-     terminated.
+     If any of the `Task`s errors, the remaining `Task`s are terminated.
 
      ''''
 
@@ -114,8 +108,8 @@
 
      The `Task` that returns first is the final result.
 
-     If any of the `Task`s returns, errors, or cancels, the remaining `Task`s
-     are terminated.
+     If any of the `Task`s return or error, the remaining `Task`s are
+     terminated.
 
      ''''
 
@@ -210,8 +204,6 @@
    If the `Task` returns, then the final result is `Void`.
 
    If the `Task` errors, then this `Task` errors.
-
-   If the `Task` cancels, then this `Task` cancels.
 
    ''''
 

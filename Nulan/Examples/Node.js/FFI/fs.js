@@ -41,11 +41,6 @@ export const read_from_Node = (input, output) => (action) => {
     action.error(e);
   };
 
-  const onCancel = () => {
-    cleanup();
-    action.cancel();
-  };
-
   const onReadable = () => {
     // TODO is this correct ?
     if (!finished) {
@@ -54,7 +49,7 @@ export const read_from_Node = (input, output) => (action) => {
       const chunk = input["read"]();
       if (chunk !== null) {
         // TODO is it possible for a "readable" event to trigger even if `chunk` is not `null` ?
-        const t = run(push(output, chunk), onReadable, onError, onCancel);
+        const t = run(push(output, chunk), onReadable, onError);
 
         action.onTerminate = () => {
           cleanup();
@@ -122,15 +117,9 @@ export const write_to_Node = (input, output) => (action) => {
     action.error(e);
   };
 
-  const onCancel = () => {
-    // TODO should this end the output ?
-    cleanup();
-    action.cancel();
-  };
-
   const onDrain = () => {
     if (!closed) {
-      const t = run(pull(input), onSuccess, onError, onCancel);
+      const t = run(pull(input), onSuccess, onError);
 
       action.onTerminate = () => {
         // TODO should this end the output ?

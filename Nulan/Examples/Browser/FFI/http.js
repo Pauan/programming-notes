@@ -8,7 +8,6 @@ const http_request = (type, url) => (action) => {
   req["addEventListener"]("abort", () => {
     // TODO is this necessary ?
     if (!terminated) {
-      // TODO should this error or cancel ?
       action.error(new Error(type + " request to URL '" + url + "' was aborted"));
     }
   }, true);

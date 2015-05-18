@@ -248,7 +248,7 @@ const main = () => _bind(files_from_directory_recursive("/home/pauan/Downloads")
   fastest([log_current_time(10),
            success(5)]);*/
 
-/*const t = run(_finally(success(1), success(2)), () => {}, () => {}, () => {});
+/*const t = run(_finally(success(1), success(2)), () => {}, () => {});
 
 setTimeout(() => {
   console.log(t._state);

@@ -32,7 +32,6 @@
    number of milliseconds, the `Task` is terminated."
   (timeout :: (-> Integer (Task Void) (Task Void)))
   (timeout ms task)
-    # TODO if it times out, maybe it should cancel rather than returning Void ?
     (fastest task (delay ms)))
 
 (FUNCTION

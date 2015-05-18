@@ -37,10 +37,6 @@ const cleanup_error = (e) => {
   print_error(e);
 };
 
-const cleanup_cancel = () => {
-  print_warning("action cancelled after completing");
-};
-
 const cleanup_terminate = () => {
   // TODO should this print only when the action is actually terminated twice ?
   print_warning("action terminated after completing");
@@ -50,12 +46,11 @@ const cleanup_terminate = () => {
 const cleanup = (action) => {
   action.success = cleanup_success;
   action.error = cleanup_error;
-  action.cancel = cleanup_cancel;
   action.terminate = cleanup_terminate;
   action.onTerminate = null;
 };
 
-export const run = (task, onSuccess, onError, onCancel) => {
+export const run = (task, onSuccess, onError) => {
   ++RUNNING_TASKS;
 
   const action = {
@@ -78,15 +73,6 @@ export const run = (task, onSuccess, onError, onCancel) => {
 
       async(() => {
         onError(e);
-        --RUNNING_TASKS;
-      });
-    },
-
-    cancel: () => {
-      cleanup(action);
-
-      async(() => {
-        onCancel();
         --RUNNING_TASKS;
       });
     },
@@ -115,7 +101,7 @@ export const run = (task, onSuccess, onError, onCancel) => {
 
 export const noop = () => {};
 
-// There's no standard way to cancel/terminate a Promise
+// There's no standard way to terminate a Promise
 export const Task_from_Promise = (f) => (action) => {
   f()["then"](action.success, action.error);
 };
@@ -123,8 +109,7 @@ export const Task_from_Promise = (f) => (action) => {
 // TODO how to handle the task/promise being terminated ?
 export const Promise_from_Task = (task) =>
   new Promise((resolve, reject) => {
-    // TODO is cancellation correctly handled ?
-    run(task, resolve, reject, reject);
+    run(task, resolve, reject);
   });
 
 
@@ -164,9 +149,7 @@ export const block = () => {
 export const run_thread = (task) =>
   // It uses `block` to make sure that Node.js doesn't exit until all the Tasks are done
   // TODO is it inefficient to use _finally here ?
-  run(_finally(task, block()), noop, print_error, () => {
-    print_warning("task was cancelled");
-  });
+  run(_finally(task, block()), noop, print_error);
 
 /*export const thread = (task) => (action) => {
   run_thread(task);
@@ -191,10 +174,6 @@ export const error = (s) => {
   return (action) => {
     action.error(e);
   };
-};
-
-export const cancel = () => (action) => {
-  action.cancel();
 };
 
 // TODO what if the action is terminated ?
@@ -223,7 +202,7 @@ export const _bind = (task, f) => (action) => {
   // TODO slightly inefficient
   // TODO is this needed to prevent a memory leak of `a` ?
   (function () {
-    const a = run(task, onSuccess, action.error, action.cancel);
+    const a = run(task, onSuccess, action.error);
 
     action.onTerminate = () => {
       terminated = true;
@@ -234,7 +213,7 @@ export const _bind = (task, f) => (action) => {
 
 /*export const always = (task) => (action) => {
   // This is always run, even if it's terminated
-  run(task, action.success, action.error, action.cancel);
+  run(task, action.success, action.error);
 };*/
 
 export const protect_terminate = (task, onTerminated, onSuccess) => (action) => {
@@ -246,11 +225,11 @@ export const protect_terminate = (task, onTerminated, onSuccess) => (action) => 
 
     if (terminated) {
       // This is always run, even if it's terminated
-      run(onTerminated(value), noop, action.error, action.cancel);
+      run(onTerminated(value), noop, action.error);
     } else {
       onSuccess(value)(action);
     }
-  }, action.error, action.cancel);
+  }, action.error);
 
   action.onTerminate = () => {
     terminated = true;
@@ -261,7 +240,7 @@ export const protect_terminate = (task, onTerminated, onSuccess) => (action) => 
   const t = run(task, (value) => {
     action.onTerminate = null;
     onSuccess(value)(action);
-  }, action.error, action.cancel);
+  }, action.error);
 
   action.onTerminate = () => {
     if (t.terminate()) {
@@ -317,90 +296,34 @@ export const _finally = (before, after) => (action) => {
     // This task is run no matter what, even if it is terminated
     run(after, (_) => {
       action.success(value);
-    }, action.error, action.cancel);
+    }, action.error);
   };
 
   const onError = (e) => {
     // TODO is this necessary to prevent a memory leak ?
     action.onTerminate = null;
 
-    // Errors have precedence over cancellations
-    // TODO should errors have precedence over cancellations ?
-    const propagate = () => {
+    // This task is run no matter what, even if it is terminated
+    run(after, (_) => {
       action.error(e);
-    };
-
-    // This task is run no matter what, even if it is terminated
-    run(after, propagate, action.error, propagate);
-  };
-
-  const onCancel = () => {
-    // TODO is this necessary to prevent a memory leak ?
-    action.onTerminate = null;
-
-    // This task is run no matter what, even if it is terminated
-    run(after, action.cancel, action.error, action.cancel);
+    }, action.error);
   };
 
   // TODO slightly inefficient
   // TODO is this needed to prevent a memory leak of `t` ?
   (function () {
-    const t = run(before, onSuccess, onError, onCancel);
+    const t = run(before, onSuccess, onError);
 
     action.onTerminate = () => {
       if (t.terminate()) {
         // This task is run no matter what, even if it is terminated
         // There's nothing to return, so we use `noop`
         // TODO can this be implemented as `after(action)` ?
-        run(after, noop, action.error, action.cancel);
+        run(after, noop, action.error);
       }
     };
   })();
 };
-
-// TODO is this correct ?
-export const ignore_cancel = (task) => (action) => {
-  const t = run(task, action.success, action.error, () => {
-    action.success(undefined);
-  });
-
-  action.onTerminate = () => {
-    t.terminate();
-  };
-};
-
-/*export const on_cancel = (task, x, y) => (action) => {
-  // TODO is this necessary ?
-  let terminated = false;
-
-  const onSuccess = (value) => {
-    if (!terminated) {
-      action.onTerminate = null;
-      // Tail recursive
-      x(value)(action);
-    }
-  };
-
-  const onCancel = () => {
-    // TODO maybe this should execute even if it was terminated ?
-    if (!terminated) {
-      action.onTerminate = null;
-      // Tail recursive
-      y(action);
-    }
-  };
-
-  // TODO slightly inefficient
-  // TODO is this needed to prevent a memory leak of `a` ?
-  (function () {
-    const a = run(task, onSuccess, action.error, onCancel);
-
-    action.onTerminate = () => {
-      terminated = true;
-      a.terminate();
-    };
-  })();
-};*/
 
 export const terminateAll = (actions) => {
   // TODO is it faster to use a var or a let ?
@@ -431,7 +354,7 @@ export const sequential = (a) => (action) => {
       // TODO slightly inefficient
       // TODO is this needed to prevent a memory leak of `t` ?
       (function () {
-        const t = run(a[i], onSuccess, action.error, action.cancel);
+        const t = run(a[i], onSuccess, action.error);
 
         action.onTerminate = () => {
           terminated = true;
@@ -480,18 +403,13 @@ export const concurrent = (a) => (action) => {
     action.error(e);
   };
 
-  const onCancel = () => {
-    onTerminate();
-    action.cancel();
-  };
-
   for (let i = 0; i < a["length"]; ++i) {
     // TODO test that this is always called asynchronously
     // TODO does this leak `t` after `a[i]` succeeds ?
     const t = run(a[i], (value) => {
       out[i] = value;
       onSuccess();
-    }, onError, onCancel);
+    }, onError);
 
     actions["push"](t);
   }
@@ -524,16 +442,10 @@ export const fastest = (a) => (action) => {
     action.error(e);
   };
 
-  // TODO should it only cancel if all the tasks fail ?
-  const onCancel = () => {
-    onTerminate();
-    action.cancel();
-  };
-
   // TODO is it faster to use var or let ?
   for (let i = 0; i < a["length"]; ++i) {
     // TODO test that this is always called asynchronously
-    actions["push"](run(a[i], onSuccess, onError, onCancel));
+    actions["push"](run(a[i], onSuccess, onError));
   }
 
   action.onTerminate = onTerminate;
