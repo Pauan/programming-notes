@@ -38,13 +38,12 @@ const cleanup_error = (e) => {
 };
 
 const cleanup_terminate = () => {
-  // TODO should this print only when the action is actually terminated twice ?
-  print_warning("action terminated after completing");
+  // TODO should this print a warning if `terminate` is called twice ?
   return false;
 };
 
-const cleanup = (action) => {
-  action.success = cleanup_success;
+const cleanup = (action, success) => {
+  action.success = success;
   action.error = cleanup_error;
   action.terminate = cleanup_terminate;
   action.onTerminate = null;
@@ -60,7 +59,7 @@ export const run = (task, onSuccess, onError) => {
       // TODO convenience function for this
       //TASK_RUN_STACK["push"](new Error("")["stack"]["split"](/\n */)[2]);
 
-      cleanup(action);
+      cleanup(action, cleanup_success);
 
       async(() => {
         onSuccess(value);
@@ -69,7 +68,7 @@ export const run = (task, onSuccess, onError) => {
     },
 
     error: (e) => {
-      cleanup(action);
+      cleanup(action, cleanup_success);
 
       async(() => {
         onError(e);
@@ -80,7 +79,8 @@ export const run = (task, onSuccess, onError) => {
     terminate: () => {
       const f = action.onTerminate;
 
-      cleanup(action);
+      // It's okay for an action to succeed after termination
+      cleanup(action, noop);
 
       // Not every action supports termination
       if (f !== null) {

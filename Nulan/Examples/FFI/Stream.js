@@ -1,5 +1,5 @@
 import { Queue, array_remove } from "./Util";
-import { run_thread, _finally } from "./Task";
+import { run, _finally, noop } from "./Task";
 
 
 // TODO maybe move this into Task.js ?
@@ -82,6 +82,7 @@ class Stream {
       this._pushers = null;
 
       // TODO is this check a good idea ?
+      // TODO isn't this handled by done_pushing ?
       if (pushers !== null && pushers["length"]) {
         action.error(new Error("There are still " + pushers["length"] + " pending pushes after termination"));
       } else {
@@ -195,9 +196,13 @@ export const make_stream = (f) => f;
 export const with_stream = (stream, some, none, f) => (action) => {
   const s = new Stream(DEFAULT_STREAM_LIMIT, some, none);
 
-  s._thread = run_thread(_finally(stream(s), done_pushing(s)));
+  s._thread = run(_finally(stream(s), done_pushing(s)), noop, (e) => {
+    t.terminate();
+    action.error(e);
+  });
 
-  _finally(f(s), done_pulling(s))(action);
+  // TODO should this be before or after `s._thread` ?
+  const t = run(_finally(f(s), done_pulling(s)), action.success, action.error);
 };
 
 export const peek = (stream) => (action) => {

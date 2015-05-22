@@ -199,42 +199,25 @@
            ,@cases))))
 
 (FUNCTION
-  "When executed, executes the `Task`.
-
-   If the `Task` returns, then the final result is `Void`.
-
-   If the `Task` errors, then this `Task` errors.
-
-   ''''
-
-   This is useful if you aren't interested in the return value of a `Task`:
-
-   [source,nulan]
-   ----
-   (DO (ignore (foo))
-       (bar))
-   ----"
-  (ignore :: (-> (Task a) (Task Void)))
-  (ignore task)
-    (DO _ = task
-        void))
-
-(FUNCTION
   "When executed, executes the `Task` forever, as quickly as possible."
   (forever :: (-> (Task Void) (Task a)))
   (forever task)
     (DO task
         (forever task)))
 
+# TODO better name for this
 (FUNCTION
   "The same as `sequential`, except it returns `Void` rather than a `List`."
-  (ignore-sequential :: (-> @(Task a) (Task Void)))
+  (ignore-sequential :: (-> @(Task Void) (Task Void)))
   (ignore-sequential @in)
-    (ignore (sequential @in)))
+    (DO _ = (sequential @in)
+        void))
 
+# TODO better name for this
 (FUNCTION
   "The same as `concurrent`, except it returns `Void` rather than a `List`."
-  (ignore-concurrent :: (-> @(Task a) (Task Void)))
+  (ignore-concurrent :: (-> @(Task Void) (Task Void)))
   (ignore-concurrent @in)
-    (ignore (concurrent @in)))
+    (DO _ = (concurrent @in)
+        void))
 ----

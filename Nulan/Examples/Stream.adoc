@@ -56,13 +56,13 @@
                (Task Void)))
   (each s f)
     (with-stream s -> in
-      (LOOP next
+      (LOOP
         (DO-MATCH (pull! in)
           (*none)
             void
           (*some value)
             (DO (f value)
-                (next))))))
+                (loop))))))
 
 (FUNCTION
   (merge :: (-> @(Stream a) (Stream a)))
@@ -101,14 +101,13 @@
                 (Task a)))
   (foldl init s f)
     (with-stream s -> in
-      (LOOP next
-          | old = init
+      (LOOP old = init
         (DO-MATCH (pull! in)
           (*none)
             (wrap old)
           (*some value)
             (DO new = (f old value)
-                (next new))))))
+                (loop new))))))
 
 (FUNCTION
   # TODO is this correct ?
@@ -137,10 +136,9 @@
   (generate :: (-> a (-> a a) (Stream a)))
   (generate init f)
     (make-stream -> out
-      (LOOP next
-          | x = init
+      (LOOP x = init
         (DO (push! out x)
-            (next (f x))))))
+            (loop (f x))))))
 ----
 
 .Examples

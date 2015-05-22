@@ -39,11 +39,10 @@
   (benchmark task)
     (DO now = current-time
       (LET end = (add now 10000)
-        (LOOP next
-            | i = 0
+        (LOOP i = 0
           (DO now = current-time
             (IF (less? now end)
               (DO task
-                  (next (add i 1)))
+                  (loop (add i 1)))
               (wrap i)))))))
 ----

@@ -1,4 +1,4 @@
-import { _void, run_root, _bind, success, error, log, never, concurrent, fastest, run_thread } from "../FFI/Task";
+import { _void, run_root, _bind, success, error, log, never, concurrent, protect_terminate, _finally, fastest, run_thread } from "../FFI/Task";
 import { delay, current_time } from "../FFI/Time";
 import { pull, make_stream, with_stream, push, some, none } from "../FFI/Stream";
 import { read_file, write_file, files_from_directory_recursive } from "../Node.js/FFI/fs";
@@ -152,6 +152,24 @@ const increment = (i) =>
   each(make_stream((s) => forever(push(s, 5))), (_) => _void);*/
 
 /*const main = () =>
+  with_stream(make_stream((_) => error("foo")), some, none, (_) => _void);*/
+
+/*const main = () =>
+  with_stream(make_stream((_) => _void), some, none, (_) => error("foo"));*/
+
+/*const main = () =>
+  with_stream(make_stream((_) => _bind(delay(1000), (_) => error("foo"))), some, none, (_) => _void);*/
+
+/*const main = () =>
+  with_stream(make_stream((_) => _void), some, none, (_) => _bind(delay(1000), (_) => error("foo")));*/
+
+/*const main = () =>
+  with_stream(make_stream((_) => protect_terminate(error("foo"), (_) => _void, (_) => _void)), some, none, (_) => _void);*/
+
+/*const main = () =>
+  with_stream(make_stream((_) => protect_terminate(_bind(delay(1000), (_) => error("foo")), (_) => _void, (_) => _void)), some, none, (_) => _void);*/
+
+/*const main = () =>
   with_stream(make_stream((s) => forever(push(s, 5))), some, none, (s) => {
     const next = () =>
       _bind(pull(s), (v) => {
@@ -168,6 +186,8 @@ const increment = (i) =>
 //////////////////////////////////////////////////////////////////////////////
 
 
+//run_thread(_finally(_void, _void)).terminate();
+
 /*const main = () =>
   each(merge([one, zero]), log);*/
 
@@ -175,7 +195,7 @@ const increment = (i) =>
   accumulate(merge([generate_add(0, 1),
                     generate_multiply(1, 2)]));*/
 
-/*const main = () => _void;*/
+//const main = () => _void;
 
 /*const main = () =>
   forever(success(5));*/
