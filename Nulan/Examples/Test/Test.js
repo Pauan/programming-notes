@@ -233,8 +233,11 @@ const increment = (i) =>
 /*const main = () =>
   with_stream(read_file("/home/pauan/Scratch/2014-09-30"), some, none, (_) => _void);*/
 
-const main = () =>
-  _bind(benchmark(copy_file("/home/pauan/Scratch/2014-09-30", "/home/pauan/Scratch/tmp/foo")), log);
+/*const main = () =>
+  copy_file("/home/pauan/Scratch/tmp/foo", "/home/pauan/Scratch/tmp/foo");*/
+
+/*const main = () =>
+  _bind(benchmark(copy_file("/home/pauan/Scratch/2014-09-30", "/home/pauan/Scratch/tmp/foo")), log);*/
 
 /*const main = () =>
   copy_file("/home/pauan/Scratch/2014-09-30", "/home/pauan/Scratch/tmp/foo");*/

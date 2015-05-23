@@ -47,12 +47,7 @@
 (FUNCTION
   (copy-file! :: (-> String String (Task Void)))
   (copy-file! from to)
-    # TODO should this use real-path or path-normalize ?
-    (DO from = (real-path from)
-        to   = (real-path to)
-      (IF (equal? from to)
-        (error (STRING "Cannot read and write to the same file: @" from))
-        (write-file! to (read-file from)))))
+    (write-file! to (read-file from)))
 ----
 
 .Examples

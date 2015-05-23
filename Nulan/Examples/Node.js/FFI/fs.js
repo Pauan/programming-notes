@@ -1,5 +1,6 @@
 import { make_stream, with_stream, pull, push, some, none } from "../../FFI/Stream"; // "nulan:Stream"
 import { run, protect_terminate, _finally } from "../../FFI/Task"; // "nulan:Task"
+import { increment, decrement } from "../../FFI/Util"; // "nulan:Util"
 
 const _fs   = require("fs");
 const _path = require("path");
@@ -13,6 +14,24 @@ export const callback = (action) => (err, value) => {
   }
 };
 
+
+/*export const String_to_Char = (stream) =>
+  make_stream((output) =>
+    with_stream(stream, some, none, (input) => {
+      const pusher = (s, i) =>
+        (i < s["length"]
+          ? _bind(push(output, s[i]), (_) =>
+                  pusher(s, i + 1))
+          : loop());
+
+      const loop = () =>
+        _bind(pull(input), (value) =>
+          (value["length"]
+            ? pusher(value[0], 0)
+            : _void));
+
+      return loop();
+    }));*/
 
 export const read_from_Node = (input, output) => (action) => {
   let finished = false;
@@ -139,17 +158,83 @@ export const write_to_Node = (input, output) => (action) => {
 };
 
 
+const OPENED_READERS = {};
+const OPENED_WRITERS = {};
+const OPENED_FD      = {};
+
+const write_read_error = (path) =>
+  new Error("Cannot read, file \"" + path + "\" is being written to");
+
+const read_write_error = (path) =>
+  new Error("Cannot write, file \"" + path + "\" is being read from");
+
+const write_write_error = (path) =>
+  new Error("Cannot write, file \"" + path + "\" is being written to");
+
 const fs_close = (fd) => (action) => {
-  _fs["close"](fd, callback(action));
+  _fs["close"](fd, (err) => {
+    if (err) {
+      action.error(err);
+
+    } else {
+      OPENED_FD[fd]();
+      delete OPENED_FD[fd];
+
+      action.success(undefined);
+    }
+  });
 };
 
+// TODO path normalization
 const fs_open = (path, flags) => (action) => {
-  _fs["open"](path, flags, callback(action));
+  if (OPENED_WRITERS[path] && flags === "r") {
+    action.error(write_read_error(path));
+
+  } else if (OPENED_READERS[path] && flags === "w") {
+    action.error(read_write_error(path));
+
+  } else if (OPENED_WRITERS[path] && flags === "w") {
+    action.error(write_write_error(path));
+
+  } else {
+    const obj = (flags === "r"
+                  ? OPENED_READERS
+                  // TODO check that flags is "w"
+                  : OPENED_WRITERS);
+
+    increment(obj, path);
+
+    _fs["open"](path, flags, (err, fd) => {
+      if (err) {
+        decrement(obj, path);
+
+        action.error(err);
+
+      } else {
+        OPENED_FD[fd] = () => {
+          decrement(obj, path);
+        };
+
+        action.success(fd);
+      }
+    });
+  }
 };
 
 // TODO test that this handles EMFILE correctly
+// TODO path normalization
 const fs_readdir = (path, f) => {
-  _fs["readdir"](path, f);
+  if (OPENED_WRITERS[path]) {
+    action.error(write_read_error(path));
+
+  } else {
+    increment(OPENED_READERS, path);
+
+    _fs["readdir"](path, (err, files) => {
+      decrement(OPENED_READERS, path);
+      f(err, files);
+    });
+  }
 };
 
 const fs_readStream = (fd) =>
@@ -191,14 +276,60 @@ export const write_file = (path, input) =>
     with_fs_open(path, "w", (fd) =>
       write_to_Node(input, fs_writeStream(fd))));
 
+// TODO path normalization
 export const rename_file = (from, to) => (action) => {
-  // TODO does this need to handle EMFILE ?
-  _fs["rename"](from, to, callback(action));
+  if (OPENED_READERS[from]) {
+    action.error(read_write_error(from));
+
+  } else if (OPENED_WRITERS[from]) {
+    action.error(write_write_error(from));
+
+  } else if (OPENED_READERS[to]) {
+    action.error(read_write_error(to));
+
+  } else if (OPENED_WRITERS[to]) {
+    action.error(write_write_error(to));
+
+  } else {
+    increment(OPENED_WRITERS, from);
+    increment(OPENED_WRITERS, to);
+
+    // TODO does this need to handle EMFILE ?
+    _fs["rename"](from, to, (err) => {
+      decrement(OPENED_WRITERS, from);
+      decrement(OPENED_WRITERS, to);
+
+      if (err) {
+        action.error(err);
+      } else {
+        action.success(undefined);
+      }
+    });
+  }
 };
 
+// TODO path normalization
 export const symlink = (from, to) => (action) => {
-  // TODO does this need to handle EMFILE ?
-  _fs["symlink"](from, to, callback(action));
+  if (OPENED_READERS[from]) {
+    action.error(read_write_error(from));
+
+  } else if (OPENED_WRITERS[from]) {
+    action.error(write_write_error(from));
+
+  } else {
+    increment(OPENED_WRITERS, from);
+
+    // TODO does this need to handle EMFILE ?
+    _fs["symlink"](from, to, (err) => {
+      decrement(OPENED_WRITERS, from);
+
+      if (err) {
+        action.error(err);
+      } else {
+        action.success(undefined);
+      }
+    });
+  }
 };
 
 // TODO is this necessary / useful ?
@@ -207,31 +338,85 @@ export const real_path = (path) => (action) => {
   _fs["realpath"](path, callback(action));
 };
 
+// TODO path normalization
 export const remove_file = (path) => (action) => {
-  // TODO does this need to handle EMFILE ?
-  _fs["unlink"](path, callback(action));
+  // TODO is this necessary ? doesn't the OS keep a file alive as long as there's at least one reference to it ?
+  if (OPENED_READERS[path]) {
+    action.error(read_write_error(path));
+
+  } else if (OPENED_WRITERS[path]) {
+    action.error(write_write_error(path));
+
+  } else {
+    increment(OPENED_WRITERS, path);
+
+    // TODO does this need to handle EMFILE ?
+    _fs["unlink"](path, (err) => {
+      decrement(OPENED_WRITERS, path);
+
+      if (err) {
+        action.error(err);
+      } else {
+        action.success(undefined);
+      }
+    });
+  }
 };
 
+// TODO path normalization
 export const remove_directory = (path) => (action) => {
-  // TODO does this need to handle EMFILE ?
-  _fs["rmdir"](path, callback(action));
+  // TODO is this necessary ? doesn't the OS keep a file alive as long as there's at least one reference to it ?
+  if (OPENED_READERS[path]) {
+    action.error(read_write_error(path));
+
+  } else if (OPENED_WRITERS[path]) {
+    action.error(write_write_error(path));
+
+  } else {
+    increment(OPENED_WRITERS, path);
+
+    // TODO does this need to handle EMFILE ?
+    _fs["rmdir"](path, (err) => {
+      decrement(OPENED_WRITERS, path);
+
+      if (err) {
+        action.error(err);
+      } else {
+        action.success(undefined);
+      }
+    });
+  }
 };
 
 // TODO this should probably return something indicating whether the directory
 //      already existed or not, or perhaps have another function for that ?
 // TODO does this need to handle EMFILE ?
+// TODO path normalization
 export const make_directory = (path) => (action) => {
-  _fs["mkdir"](path, (err) => {
-    if (err) {
-      if (err["code"] === "EEXIST") {
-        action.success(undefined);
+  // TODO is this necessary ? doesn't the OS keep a file alive as long as there's at least one reference to it ?
+  if (OPENED_READERS[path]) {
+    action.error(read_write_error(path));
+
+  } else if (OPENED_WRITERS[path]) {
+    action.error(write_write_error(path));
+
+  } else {
+    increment(OPENED_WRITERS, path);
+
+    _fs["mkdir"](path, (err) => {
+      decrement(OPENED_WRITERS, path);
+
+      if (err) {
+        if (err["code"] === "EEXIST") {
+          action.success(undefined);
+        } else {
+          action.error(err);
+        }
       } else {
-        action.error(err);
+        action.success(undefined);
       }
-    } else {
-      action.success(undefined);
-    }
-  });
+    });
+  }
 };
 
 export const files_from_directory = (path) => (action) => {

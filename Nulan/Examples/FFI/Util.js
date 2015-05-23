@@ -87,6 +87,21 @@ export const array_remove = (array, x) => {
   }
 };
 
+export const increment = (obj, key) => {
+  if (obj[key] == null) {
+    obj[key] = 1;
+  } else {
+    ++obj[key];
+  }
+};
+
+export const decrement = (obj, key) => {
+  --obj[key];
+  if (obj[key] === 0) {
+    delete obj[key];
+  }
+};
+
 
 /*
 // TODO use setImmediate shim
