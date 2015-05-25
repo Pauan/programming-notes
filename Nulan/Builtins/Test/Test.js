@@ -1,7 +1,7 @@
 import { _void, run_root, _bind, success, error, log, never, concurrent, protect_terminate, _finally, fastest, run_thread } from "../FFI/Task";
 import { delay, current_time } from "../FFI/Time";
 import { pull, make_stream, with_stream, push, some, none } from "../FFI/Stream";
-import { read_file, write_file, files_from_directory_recursive } from "../Node.js/FFI/fs";
+import { fs_read_file, fs_make_file, fs_files_recursive, fs_remove, fs_copy, fs_rename } from "../Node.js/FFI/fs";
 import { is_hidden_file } from "../Node.js/FFI/path";
 
 
@@ -87,8 +87,8 @@ const generate = (init, f) =>
 
 
 // fs.adoc
-const copy_file = (from, to) =>
-  write_file(to, read_file(from));
+const fs_copy_file = (from, to) =>
+  fs_make_file(to, fs_read_file(from));
 
 
 //////////////////////////////////////////////////////////////////////////////
@@ -234,13 +234,17 @@ const increment = (i) =>
   with_stream(read_file("/home/pauan/Scratch/2014-09-30"), some, none, (_) => _void);*/
 
 /*const main = () =>
-  copy_file("/home/pauan/Scratch/tmp/foo", "/home/pauan/Scratch/tmp/foo");*/
+  fs_copy_file("/home/pauan/Scratch/tmp/foo", "/home/pauan/Scratch/tmp/foo");*/
 
 /*const main = () =>
-  _bind(benchmark(copy_file("/home/pauan/Scratch/2014-09-30", "/home/pauan/Scratch/tmp/foo")), log);*/
+  fs_copy_file("/home/pauan/Scratch/2014-09-30", "/home/pauan/Scratch/tmp/foo");*/
+
+const main = () =>
+  fs_rename("/home/pauan/Scratch/tmp/foo", "/home/pauan/Scratch/tmp/foo3");
 
 /*const main = () =>
-  copy_file("/home/pauan/Scratch/2014-09-30", "/home/pauan/Scratch/tmp/foo");*/
+  _bind(benchmark(_bind(fs_remove("/home/pauan/Scratch/tmp/foo"), (_) =>
+                    fs_copy("/home/pauan/Scratch/2014-09-30", "/home/pauan/Scratch/tmp/foo"))), log);*/
 
 /*let i = 1013;
 while (i--) {

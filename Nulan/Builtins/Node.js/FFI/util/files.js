@@ -1,0 +1,79 @@
+import { callback } from "./util";
+import { readdir } from "./fs";
+import { push_Array } from "./stream";
+import { push } from "../../../FFI/Stream"; // "nulan:Stream"
+import { run } from "../../../FFI/Task"; // "nulan:Task"
+
+
+const readdir_sorted = (path, cb) => {
+  readdir(path, (err, files) => {
+    if (err) {
+      cb(err);
+    } else {
+      cb(err, files.sort());
+    }
+  });
+};
+
+export const files = (output, path) => (action) => {
+  readdir_sorted(path, (err, files) => {
+    if (err) {
+      action.error(err);
+
+    } else {
+      push_Array(output, files)(action);
+    }
+  });
+};
+
+const push_files_recursive = (output, path, files, action, cb) => {
+  const inner = (i) => {
+    if (i < files["length"]) {
+      const file = _path["join"](path, files[i]);
+
+      readdir_sorted(file, (err, files) => {
+        if (err) {
+          if (err["code"] === "ENOTDIR") {
+            const t = run(push(output, file), (_) => {
+              inner(i + 1);
+            }, cb);
+
+            action.onTerminate = () => {
+              // TODO does it need to terminate anything else ?
+              t.terminate();
+            };
+
+          } else {
+            cb(err);
+          }
+
+        } else {
+          push_files_recursive(output, file, files, action, (err) => {
+            if (err) {
+              cb(err);
+            } else {
+              inner(i + 1);
+            }
+          });
+        }
+      });
+
+    } else {
+      cb(null);
+    }
+  };
+
+  inner(0);
+};
+
+// TODO handle termination ?
+export const files_recursive = (output, path) => (action) => {
+  readdir_sorted(path, (err, files) => {
+    if (err) {
+      action.error(err);
+
+    } else {
+      push_files_recursive(output, path, files, action, callback(action));
+    }
+  });
+};
