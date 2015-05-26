@@ -3,17 +3,19 @@
 ----
 (USE {} = "nulan:Task")
 (USE {} = "nulan:Stream")
+(USE {} = "./path")
 
 (EXPORT { fs-read-file = fs_read_file
         | fs-make-file! = fs_make_file
         | fs-make-symlink! = fs_make_symlink
         | fs-make-directory! = fs_make_directory
-        #| fs-make-temporary-file! = fs_make_temporary_file
 
         | fs-remove! = fs_remove
         | fs-rename! = fs_rename
         | fs-copy! = fs_copy
+        | fs-replace-file! = fs_replace_file
 
+        | fs-with-temporary-directory = fs_with_temporary_directory
         | fs-files = fs_files
         | fs-files-recursive = fs_files_recursive }
 
@@ -26,7 +28,7 @@
 
     (fs_make_directory :: (-> String (Task Void)))
 
-    #(fs_make_temporary_file :: (-> (Stream String) (Stream String)))
+    (fs_with_temporary_directory :: (-> (-> String (Task a)) (Task a)))
 
     (fs_remove :: (-> String (Task Void)))
 
@@ -34,9 +36,27 @@
 
     (fs_copy :: (-> String String (Task Void)))
 
+    (fs_replace_file :: (-> String String (Task Void)))
+
     (fs_files :: (-> String (Stream String)))
 
     (fs_files_recursive :: (-> String (Stream String)))))
+
+
+(FUNCTION
+  (fs-with-temporary-path :: (-> (-> String (Task a)) (Task a)))
+  (fs-with-temporary-path f)
+    (fs-with-temporary-directory -> dir
+      (f (path dir "tmp"))))
+
+(FUNCTION
+  (fs-map-file! :: (-> String
+                       (-> (Stream String) (Stream String))
+                       (Task Void)))
+  (fs-map-file! file f)
+    (fs-with-temporary-path -> x
+      (DO (fs-make-file! x (f (fs-read-file file)))
+          (fs-replace-file! x file))))
 ----
 
 .Examples

@@ -9,6 +9,7 @@ let RUNNING = 0;
 const MAX_RUNNING = 100; // Somewhat arbitrary number
 const PENDING = []; // TODO use Queue ?
 
+// TODO use EMFILE error instead ...?
 export const pend = (f) => {
   if (RUNNING === MAX_RUNNING) {
     PENDING["push"](() => {

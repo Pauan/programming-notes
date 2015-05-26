@@ -20,6 +20,18 @@ export const close = (fd, cb) => {
   _fs["close"](fd, callback(cb));
 };
 
+export const stat = (path, cb) => {
+  pend(() => {
+    _fs["stat"](path, callback(cb));
+  });
+};
+
+export const chmod = (path, mode, cb) => {
+  pend(() => {
+    _fs["chmod"](path, mode, callback(cb));
+  });
+};
+
 export const lstat = (path, cb) => {
   pend(() => {
     _fs["lstat"](path, callback(cb));
@@ -27,6 +39,12 @@ export const lstat = (path, cb) => {
 };
 
 export const rename = (from, to, cb) => {
+  pend(() => {
+    _fs["rename"](from, to, callback(cb));
+  });
+};
+
+export const rename_safe = (from, to, cb) => {
   pend(() => {
     // TODO figure out a better way to prevent overwriting `to`
     _fs["lstat"](to, (err, _) => {

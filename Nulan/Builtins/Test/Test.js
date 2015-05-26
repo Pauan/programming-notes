@@ -1,8 +1,8 @@
 import { _void, run_root, _bind, success, error, log, never, concurrent, protect_terminate, _finally, fastest, run_thread } from "../FFI/Task";
 import { delay, current_time } from "../FFI/Time";
 import { pull, make_stream, with_stream, push, some, none } from "../FFI/Stream";
-import { fs_read_file, fs_make_file, fs_files_recursive, fs_remove, fs_copy, fs_rename } from "../Node.js/FFI/fs";
-import { is_hidden_file } from "../Node.js/FFI/path";
+import { fs_read_file, fs_make_file, fs_files_recursive, fs_remove, fs_copy, fs_rename, fs_replace_file, fs_with_temporary_directory } from "../Node.js/FFI/fs";
+import { path, is_hidden_file } from "../Node.js/FFI/path";
 
 
 const debug = (s, x) => {
@@ -77,6 +77,11 @@ const foldl = (init, s, f) =>
     return next(init);
   });
 
+const map = (_in, f) =>
+  make_stream((out) =>
+    each(_in, (value) =>
+      push(out, f(value))));
+
 const generate = (init, f) =>
   make_stream((out) => {
     const next = (x) =>
@@ -89,6 +94,15 @@ const generate = (init, f) =>
 // fs.adoc
 const fs_copy_file = (from, to) =>
   fs_make_file(to, fs_read_file(from));
+
+const fs_with_temporary_path = (f) =>
+  fs_with_temporary_directory((dir) =>
+    f(path([dir, "tmp"])));
+
+const fs_map_file = (file, f) =>
+  fs_with_temporary_path((x) =>
+    _bind(fs_make_file(x, f(fs_read_file(file))), (_) =>
+      fs_replace_file(x, file)));
 
 
 //////////////////////////////////////////////////////////////////////////////
@@ -240,7 +254,16 @@ const increment = (i) =>
   fs_copy_file("/home/pauan/Scratch/2014-09-30", "/home/pauan/Scratch/tmp/foo");*/
 
 const main = () =>
-  fs_rename("/home/pauan/Scratch/tmp/foo", "/home/pauan/Scratch/tmp/foo3");
+  fs_map_file("/home/pauan/Scratch/tmp/foo", (s) =>
+    map(s, (s) => s["toLocaleUpperCase"]()));
+
+/*const main = () =>
+  fs_make_file("/home/pauan/Scratch/tmp/foo",
+    map(fs_read_file("/home/pauan/Scratch/tmp/foo"), (s) =>
+      s["toLocaleUpperCase"]()));*/
+
+/*const main = () =>
+  fs_rename("/home/pauan/Scratch/tmp/foo", "/home/pauan/Scratch/tmp/foo3");*/
 
 /*const main = () =>
   _bind(benchmark(_bind(fs_remove("/home/pauan/Scratch/tmp/foo"), (_) =>

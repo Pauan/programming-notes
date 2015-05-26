@@ -13,7 +13,6 @@ const bytes_to_chars = (buf) => {
   return a["join"]("");
 };
 
-// TODO separate module for this
 export const random_chars = (limit, f) => {
   _crypto["randomBytes"](limit, (err, buf) => {
     if (err) {

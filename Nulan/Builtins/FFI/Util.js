@@ -9,11 +9,13 @@ export const error_stack = (e) => {
 };
 
 export const print_error = (e) => {
-  console["error"](error_stack(e));
+  // TODO the newline looks better in Node.js, but worse in Chrome
+  console["error"](error_stack(e) + "\n");
 };
 
 export const print_warning = (s) => {
-  console["warn"]("WARNING: " + s);
+  // TODO the newline looks better in Node.js, but worse in Chrome
+  console["warn"]("WARNING: " + s + "\n");
 };
 
 

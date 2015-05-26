@@ -2,10 +2,12 @@ import { make_stream, with_stream, some, none } from "../../FFI/Stream"; // "nul
 import { protect_terminate, _finally } from "../../FFI/Task"; // "nulan:Task"
 import { callback } from "./util/util";
 import { fs_readStream, fs_writeStream, read_from_Node, write_to_Node } from "./util/stream";
-import { open, close, symlink, mkdir, rename } from "./util/fs";
+import { open, close, symlink, mkdir, rename_safe } from "./util/fs";
 import { copy } from "./util/copy";
 import { remove } from "./util/remove";
 import { files, files_recursive } from "./util/files";
+import { replace_file } from "./util/replace";
+import { make_temporary_directory } from "./util/temporary";
 
 
 /*export const String_to_Char = (stream) =>
@@ -72,7 +74,7 @@ export const fs_remove = (path) => (action) => {
 
 // TODO handle termination
 export const fs_rename = (from, to) => (action) => {
-  rename(from, to, callback(action));
+  rename_safe(from, to, callback(action));
 };
 
 export const fs_copy = (from, to) => (action) => {
@@ -86,3 +88,15 @@ export const fs_files = (path) =>
 export const fs_files_recursive = (path) =>
   make_stream((output) =>
     files_recursive(output, path));
+
+const fs_make_temporary_directory = (action) => {
+  make_temporary_directory(callback(action));
+};
+
+export const fs_with_temporary_directory = (f) =>
+  protect_terminate(fs_make_temporary_directory, fs_remove, (path) =>
+    _finally(f(path), fs_remove(path)));
+
+export const fs_replace_file = (from, to) => (action) => {
+  replace_file(from, to, callback(action));
+};
