@@ -1,0 +1,11 @@
+.String.nu
+[source]
+----
+(USE {} = "nulan:List")
+
+(TYPE Code-Point)
+
+(ALIAS Grapheme = (List Code-Point))
+
+(ALIAS String = (List Grapheme))
+----

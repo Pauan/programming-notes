@@ -1,4 +1,4 @@
-import { Queue, array_remove } from "./Util";
+import { Queue, array_remove, print_warning } from "./Util";
 import { run, _finally, noop } from "./Task";
 
 
@@ -7,6 +7,9 @@ const invalid = (action) => {
   action.error(new Error("Invalid"));
 };
 
+
+// Arbitrary number
+const MAX_PENDING = 100;
 
 class Stream {
   constructor(limit, some, none) {
@@ -20,6 +23,24 @@ class Stream {
     this._pushers = []; // TODO maybe use a Queue ?
     // TODO since the limit is 1, we don't really need a Queue, an Array will be faster
     this._buffer = new Queue();
+  }
+
+  push_puller(info) {
+    this._pullers["push"](info);
+
+    const l = this._pullers["length"];
+    if (l > MAX_PENDING) {
+      print_warning("Too many pullers: " + l);
+    }
+  }
+
+  push_pusher(info) {
+    this._pushers["push"](info);
+
+    const l = this._pushers["length"];
+    if (l > MAX_PENDING) {
+      print_warning("Too many pushers: " + l);
+    }
   }
 
   done_pushing(action) {
@@ -102,7 +123,7 @@ class Stream {
         action: action
       };
 
-      this._pullers["push"](info);
+      this.push_puller(info);
 
       action.onTerminate = () => {
         // TODO is it possible for `this._pullers` to be `null` ?
@@ -166,7 +187,7 @@ class Stream {
         action: action
       };
 
-      this._pushers["push"](info);
+      this.push_pusher(info);
 
       action.onTerminate = () => {
         array_remove(this._pushers, info);

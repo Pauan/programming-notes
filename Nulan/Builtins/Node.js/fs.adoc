@@ -43,6 +43,7 @@
     (fs_files_recursive :: (-> String (Stream String)))))
 
 
+# TODO maybe make this a primitive that *only* returns a temporary path ?
 (FUNCTION
   (fs-with-temporary-path :: (-> (-> String (Task a)) (Task a)))
   (fs-with-temporary-path f)
