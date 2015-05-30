@@ -1,12 +1,12 @@
 import { waitfor, pend, unpend } from "./util";
-import { lstat, readdir, utimes, mkdir, symlink, realpath, chown } from "./fs";
+import { fs_lstat, fs_readdir, fs_utimes, fs_mkdir, fs_symlink, fs_realpath, fs_chown } from "./fs";
 
 const _fs   = require("fs");
 const _path = require("path");
 
 
-export const copy = (from, to, cb) => {
-  lstat(from, (err, stat) => {
+export const fs_copy = (from, to, cb) => {
+  fs_lstat(from, (err, stat) => {
     if (err) {
       cb(err);
 
@@ -26,7 +26,7 @@ export const copy = (from, to, cb) => {
 };
 
 const copy_children = (from, to, cb) => {
-  readdir(from, (err, files) => {
+  fs_readdir(from, (err, files) => {
     if (err) {
       cb(err);
 
@@ -34,7 +34,7 @@ const copy_children = (from, to, cb) => {
       const all = waitfor(files["length"], cb);
 
       files["forEach"]((file) => {
-        copy(_path["join"](from, file), _path["join"](to, file), all);
+        fs_copy(_path["join"](from, file), _path["join"](to, file), all);
       });
 
     } else {
@@ -46,16 +46,17 @@ const copy_children = (from, to, cb) => {
 
 const sync_stats = (path, stat, cb) => {
   // TODO use lutimes
-  utimes(path, stat["atime"], stat["mtime"], (err) => {
+  fs_utimes(path, stat["atime"], stat["mtime"], (err) => {
     if (err) {
       cb(err);
     } else {
       // TODO use lchown
-      chown(path, stat["uid"], stat["gid"], cb);
+      fs_chown(path, stat["uid"], stat["gid"], cb);
     }
   });
 };
 
+// TODO maybe move this into the './fs' module ?
 const pipe_file = (from, to, mode, cb) => {
   pend(() => {
     _fs["open"](from, "r", mode, (err, read_fd) => {
@@ -127,7 +128,7 @@ const copy_file = (from, to, stat, cb) => {
 };
 
 const copy_directory = (from, to, stat, cb) => {
-  mkdir(to, stat["mode"], (err) => {
+  fs_mkdir(to, stat["mode"], (err) => {
     if (err) {
       cb(err);
 
@@ -144,7 +145,7 @@ const copy_directory = (from, to, stat, cb) => {
 };
 
 const make_symlink = (from, to, stat, cb) => {
-  symlink(from, to, (err) => {
+  fs_symlink(from, to, (err) => {
     if (err) {
       cb(err);
 
@@ -155,7 +156,7 @@ const make_symlink = (from, to, stat, cb) => {
 };
 
 const copy_symlink = (from, to, stat, cb) => {
-  realpath(from, (err, target) => {
+  fs_realpath(from, (err, target) => {
     if (err) {
       cb(err);
 
@@ -164,27 +165,3 @@ const copy_symlink = (from, to, stat, cb) => {
     }
   });
 };
-
-
-
-/*copy("/home/pauan/Scratch/2014-09-30", "/home/pauan/Scratch/tmp/foo-file", (err) => {
-  if (err) {
-    console.log(err.stack);
-  }
-});*/
-
-/*console.log("STARTING");
-
-copy("/home/pauan/Scratch/programming-notes", "/home/pauan/Scratch/tmp/foo-dir", (err) => {
-  if (err) {
-    console.log(err.stack);
-  }
-
-  console.log("ENDING");
-});*/
-
-/*copy("/home/pauan/bin/browserify", "/home/pauan/Scratch/tmp/foo-symlink", (err) => {
-  if (err) {
-    console.log(err.stack);
-  }
-});*/

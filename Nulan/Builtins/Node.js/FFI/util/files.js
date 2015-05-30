@@ -1,12 +1,12 @@
 import { callback } from "./util";
-import { readdir } from "./fs";
+import { fs_readdir } from "./fs";
 import { push_Array } from "./stream";
 import { push } from "../../../FFI/Stream"; // "nulan:Stream"
 import { run } from "../../../FFI/Task"; // "nulan:Task"
 
 
 const readdir_sorted = (path, cb) => {
-  readdir(path, (err, files) => {
+  fs_readdir(path, (err, files) => {
     if (err) {
       cb(err);
     } else {
@@ -15,7 +15,8 @@ const readdir_sorted = (path, cb) => {
   });
 };
 
-export const files = (output, path) => (action) => {
+// TODO handle being killed
+export const fs_files = (output, path) => (action) => {
   readdir_sorted(path, (err, files) => {
     if (err) {
       action.error(err);
@@ -26,6 +27,7 @@ export const files = (output, path) => (action) => {
   });
 };
 
+// TODO handle being killed
 const push_files_recursive = (output, path, files, action, cb) => {
   const inner = (i) => {
     if (i < files["length"]) {
@@ -67,7 +69,7 @@ const push_files_recursive = (output, path, files, action, cb) => {
 };
 
 // TODO handle being killed ?
-export const files_recursive = (output, path) => (action) => {
+export const fs_files_recursive = (output, path) => (action) => {
   readdir_sorted(path, (err, files) => {
     if (err) {
       action.error(err);

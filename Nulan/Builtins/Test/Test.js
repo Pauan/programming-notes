@@ -1,7 +1,7 @@
 import { _void, run_root, _bind, success, error, log, never, concurrent, protect_kill, _finally, fastest, run_thread, sequential } from "../FFI/Task";
 import { delay, current_time } from "../FFI/Time";
 import { pull, make_stream, with_stream, push, some, none } from "../FFI/Stream";
-import { fs_read_file, fs_make_file, fs_files_recursive, fs_remove, fs_copy, fs_rename, fs_replace_file, fs_with_temporary_directory } from "../Node.js/FFI/fs";
+import { read_file, make_file, files_recursive, remove, copy, rename, replace_file, with_temporary_directory } from "../Node.js/FFI/fs";
 import { path, is_hidden_file } from "../Node.js/FFI/path";
 import { pipe, pipe_ignore_status, _arguments, stdin, pipe_stdout } from "../Node.js/FFI/script";
 
@@ -102,17 +102,17 @@ const generate = (init, f) =>
 
 
 // fs.adoc
-const fs_copy_file = (from, to) =>
-  fs_make_file(fs_read_file(from), to);
+const copy_file = (from, to) =>
+  make_file(read_file(from), to);
 
-const fs_with_temporary_path = (f) =>
-  fs_with_temporary_directory((dir) =>
+const with_temporary_path = (f) =>
+  with_temporary_directory((dir) =>
     f(path([dir, "tmp"])));
 
-const fs_map_file = (file, f) =>
-  fs_with_temporary_path((x) =>
-    _bind(fs_make_file(f(fs_read_file(file)), x), (_) =>
-      fs_replace_file(x, file)));
+const map_file = (file, f) =>
+  with_temporary_path((x) =>
+    _bind(make_file(f(read_file(file)), x), (_) =>
+      replace_file(x, file)));
 
 
 //////////////////////////////////////////////////////////////////////////////
@@ -302,26 +302,26 @@ const pull1 = (s) =>
   with_stream(read_file("/home/pauan/Scratch/2014-09-30"), some, none, (_) => _void);*/
 
 /*const main = () =>
-  fs_copy_file("/home/pauan/Scratch/tmp/foo", "/home/pauan/Scratch/tmp/foo");*/
+  copy_file("/home/pauan/Scratch/tmp/foo", "/home/pauan/Scratch/tmp/foo");*/
 
 /*const main = () =>
-  fs_copy_file("/home/pauan/Scratch/2014-09-30", "/home/pauan/Scratch/tmp/foo");*/
+  copy_file("/home/pauan/Scratch/2014-09-30", "/home/pauan/Scratch/tmp/foo");*/
 
 /*const main = () =>
-  fs_map_file("/home/pauan/Scratch/tmp/foo", (s) =>
+  map_file("/home/pauan/Scratch/tmp/foo", (s) =>
     map(s, (s) => s["toLocaleUpperCase"]()));*/
 
 /*const main = () =>
-  fs_make_file("/home/pauan/Scratch/tmp/foo",
-    map(fs_read_file("/home/pauan/Scratch/tmp/foo"), (s) =>
+  make_file("/home/pauan/Scratch/tmp/foo",
+    map(read_file("/home/pauan/Scratch/tmp/foo"), (s) =>
       s["toLocaleUpperCase"]()));*/
 
 /*const main = () =>
-  fs_rename("/home/pauan/Scratch/tmp/foo", "/home/pauan/Scratch/tmp/foo3");*/
+  rename("/home/pauan/Scratch/tmp/foo", "/home/pauan/Scratch/tmp/foo3");*/
 
 /*const main = () =>
-  _bind(benchmark(_bind(fs_remove("/home/pauan/Scratch/tmp/foo"), (_) =>
-                    fs_copy_file("/home/pauan/Scratch/2014-09-30", "/home/pauan/Scratch/tmp/foo"))), log);*/
+  _bind(benchmark(_bind(remove("/home/pauan/Scratch/tmp/foo"), (_) =>
+                    copy_file("/home/pauan/Scratch/2014-09-30", "/home/pauan/Scratch/tmp/foo"))), log);*/
 
 /*let i = 1013;
 while (i--) {

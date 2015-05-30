@@ -5,61 +5,61 @@
 (USE {} = "nulan:Stream")
 (USE {} = "./path")
 
-(EXPORT { fs-read-file = fs_read_file
-        | fs-make-file! = fs_make_file
-        | fs-make-symlink! = fs_make_symlink
-        | fs-make-directory! = fs_make_directory
+(EXPORT { read-file = read_file
+        | make-file! = make_file
+        | make-symlink! = make_symlink
+        | make-directory! = make_directory
 
-        | fs-remove! = fs_remove
-        | fs-rename! = fs_rename
-        | fs-copy! = fs_copy
-        | fs-replace-file! = fs_replace_file
+        | remove! = remove
+        | rename! = rename
+        | copy! = copy
+        | replace-file! = replace_file
 
-        | fs-with-temporary-directory = fs_with_temporary_directory
-        | fs-files = fs_files
-        | fs-files-recursive = fs_files_recursive }
+        | with-temporary-directory = with_temporary_directory
+        | files = files
+        | files-recursive = files_recursive }
 
   (FFI-IMPORT "FFI/fs"
-    (fs_read_file :: (-> String (Stream String)))
+    (read_file :: (-> String (Stream String)))
 
-    (fs_make_file :: (-> (Stream String) String (Task Void)))
+    (make_file :: (-> (Stream String) String (Task Void)))
 
-    (fs_make_symlink :: (-> String String (Task Void)))
+    (make_symlink :: (-> String String (Task Void)))
 
-    (fs_make_directory :: (-> String (Task Void)))
+    (make_directory :: (-> String (Task Void)))
 
-    (fs_with_temporary_directory :: (-> (-> String (Task a)) (Task a)))
+    (with_temporary_directory :: (-> (-> String (Task a)) (Task a)))
 
-    (fs_remove :: (-> String (Task Void)))
+    (remove :: (-> String (Task Void)))
 
-    (fs_rename :: (-> String String (Task Void)))
+    (rename :: (-> String String (Task Void)))
 
-    (fs_copy :: (-> String String (Task Void)))
+    (copy :: (-> String String (Task Void)))
 
-    (fs_replace_file :: (-> String String (Task Void)))
+    (replace_file :: (-> String String (Task Void)))
 
-    (fs_files :: (-> String (Stream String)))
+    (files :: (-> String (Stream String)))
 
-    (fs_files_recursive :: (-> String (Stream String)))))
+    (files_recursive :: (-> String (Stream String)))))
 
 
 # TODO maybe make this a primitive that *only* returns a temporary path ?
 (FUNCTION
-  (fs-with-temporary-path :: (-> (-> String (Task a)) (Task a)))
-  (fs-with-temporary-path f)
-    (fs-with-temporary-directory -> dir
+  (with-temporary-path :: (-> (-> String (Task a)) (Task a)))
+  (with-temporary-path f)
+    (with-temporary-directory -> dir
       (f (path dir "tmp"))))
 
 (FUNCTION
-  (fs-map-file! :: (-> String
+  (map-file! :: (-> String
                        (-> (Stream String) (Stream String))
                        (Task Void)))
-  (fs-map-file! file f)
-    (fs-with-temporary-path -> x
-      (DO (<< (fs-read-file file)
+  (map-file! file f)
+    (with-temporary-path -> x
+      (DO (<< (read-file file)
               (f)
-              (fs-make-file! x))
-          (fs-replace-file! x file))))
+              (make-file! x))
+          (replace-file! x file))))
 ----
 
 .Examples
@@ -69,9 +69,9 @@
 # then converts each line to uppercase,
 # then keeps only the lines that are equal to "TEST",
 # then writes those lines to the file "bar"
-(<< (fs-read-file "foo")
+(<< (read-file "foo")
     (split-lines)
     (map uppercase)
     (keep -> s (equal? s "TEST"))
-    (fs-make-file! "bar"))
+    (make-file! "bar"))
 ----

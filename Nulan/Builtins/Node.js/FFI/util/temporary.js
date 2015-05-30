@@ -1,5 +1,5 @@
 import { random_chars } from "./random";
-import { mkdir } from "./fs";
+import { fs_mkdir } from "./fs";
 
 const _fs   = require("fs");
 const _path = require("path");
@@ -17,37 +17,16 @@ const temporary_path = (f) => {
   });
 };
 
-/*export const make_temporary_file = (action) => {
-  temporary_path((err, path) => {
-    if (err) {
-      action.error(err);
-
-    } else {
-      _fs["open"](path, "wx", 384 /* 0600 *//*, (err, fd) => {
-        if (err) {
-          if (err["code"] === "EEXIST") {
-            temporary_file(action);
-          } else {
-            action.error(err);
-          }
-        } else {
-          action.success([path, fd]);
-        }
-      });
-    }
-  });
-};*/
-
-export const make_temporary_directory = (cb) => {
+export const fs_make_temporary_directory = (cb) => {
   temporary_path((err, path) => {
     if (err) {
       cb(err);
 
     } else {
-      mkdir(path, 448 /* 0700 */, (err) => {
+      fs_mkdir(path, 448 /* 0700 */, (err) => {
         if (err) {
           if (err["code"] === "EEXIST") {
-            make_temporary_directory(cb);
+            fs_make_temporary_directory(cb);
           } else {
             cb(err);
           }
@@ -58,14 +37,3 @@ export const make_temporary_directory = (cb) => {
     }
   });
 };
-
-/*const cleanup_temporary_file = (path, fd) =>
-  _finally(fs_close(fd), fs_unlink_safe(path));
-
-export const with_temporary_file = (f) =>
-  protect_kill(temporary_file,
-    ([path, fd]) =>
-      cleanup_temporary_file(path, fd),
-    ([path, fd]) =>
-      _finally(f(path, fd), cleanup_temporary_file(path, fd)));
-*/

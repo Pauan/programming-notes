@@ -1,12 +1,12 @@
 import { waitfor } from "./util";
-import { stat, rename, chmod, chown } from "./fs";
+import { fs_stat, fs_rename, fs_chmod, fs_chown } from "./fs";
 
 
 // TODO this isn't particularly robust, but it works most of the time
 // TODO what if `to_path` is a symlink ?
-export const replace_file = (from_path, to_path, cb) => {
+export const fs_replace_file = (from_path, to_path, cb) => {
   // TODO should this use "stat" or "lstat" ?
-  stat(to_path, (err, stat) => {
+  fs_stat(to_path, (err, stat) => {
     if (err) {
       cb(err);
 
@@ -16,14 +16,14 @@ export const replace_file = (from_path, to_path, cb) => {
           cb(err);
         } else {
           // TODO is this correct ?
-          rename(from_path, to_path, cb);
+          fs_rename(from_path, to_path, cb);
         }
       });
 
       // TODO what about `utimes` ?
-      chmod(from_path, stat["mode"], callback);
+      fs_chmod(from_path, stat["mode"], callback);
       // TODO if we change the owner, does that prevent us from using `chmod` or `rename` ?
-      chown(from_path, stat["uid"], stat["gid"], callback);
+      fs_chown(from_path, stat["uid"], stat["gid"], callback);
     }
   });
 };
