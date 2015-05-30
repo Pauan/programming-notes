@@ -34,50 +34,50 @@ const reverse = (array) => {
   }
 };
 
+
 // This implementation has good performance, but not necessarily faster than a raw Array
 // http://jsperf.com/promises-queue
-export class Queue {
-  constructor() {
-    this._left  = [];
-    this._right = [];
-    this.length = 0;
-  }
+export const queue_make = () => {
+  return {
+    _left: [],
+    _right: [],
+    length: 0
+  };
+};
 
-  peek() {
-    return this._left[this._left["length"] - 1];
-  }
+export const queue_peek = (queue) =>
+  queue._left[queue._left["length"] - 1];
 
-  push(value) {
-    if (this.length === 0) {
-      this._left["push"](value);
-    } else {
-      this._right["push"](value);
+export const queue_pull = (queue) => {
+  const left = queue._left;
+
+  var value = left["pop"]();
+
+  --queue.length;
+
+  if (left["length"] === 0) {
+    const right = queue._right;
+
+    if (right["length"] > 1) {
+      reverse(right);
     }
 
-    ++this.length;
+    queue._left = right;
+    queue._right = left;
   }
 
-  pull() {
-    const left = this._left;
+  return value;
+};
 
-    var value = left["pop"]();
-
-    --this.length;
-
-    if (left["length"] === 0) {
-      const right = this._right;
-
-      if (right["length"] > 1) {
-        reverse(right);
-      }
-
-      this._left = right;
-      this._right = left;
-    }
-
-    return value;
+export const queue_push = (queue, value) => {
+  if (queue.length === 0) {
+    queue._left["push"](value);
+  } else {
+    queue._right["push"](value);
   }
-}
+
+  ++queue.length;
+};
 
 
 // TODO should this throw an error or something if `x` isn't in `array` ?
@@ -119,7 +119,7 @@ const nextTick = (f) => {
 };
 
 
-const task_queue = new Queue();
+const task_queue = queue_make();
 
 // Arbitrary number, just so long as it's big enough for normal use cases
 // TODO do we really need this ?
@@ -138,7 +138,7 @@ const task_queue_flush = () => {
       // Process all the tasks that were queued up, but if more tasks are queued, they are not processed
       do {
         // Pull the task out of the queue and then call it
-        task_queue.pull()();
+        queue_pull(task_queue)();
         --pending;
       } while (pending !== 0);
 
@@ -161,7 +161,7 @@ const task_queue_flush = () => {
 // TODO is this a good idea ? it's useful for stuff like Streams, but do we want *all* Tasks to behave this way ?
 // TODO use the asap polyfill ?
 export const async = (f) => {
-  task_queue.push(f);
+  queue_push(task_queue, f);
 
   // Warn if the task queue gets too big
   // TODO do we really need this ?

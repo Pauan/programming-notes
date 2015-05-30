@@ -1,4 +1,4 @@
-import { Queue, array_remove, print_warning } from "./Util";
+import { queue_make, queue_peek, queue_pull, queue_push, array_remove, print_warning } from "./Util";
 import { run, _finally, noop } from "./Task";
 
 
@@ -21,7 +21,7 @@ class Stream {
     this._pullers = []; // TODO maybe use a Queue ?
     this._pushers = []; // TODO maybe use a Queue ?
     // TODO since the limit is 1, we don't really need a Queue, an Array will be faster
-    this._buffer = new Queue();
+    this._buffer = queue_make();
   }
 
   push_puller(info) {
@@ -128,7 +128,7 @@ class Stream {
 
   peek(action) {
     if (this._buffer.length) {
-      action.success(this._some(this._buffer.peek()));
+      action.success(this._some(queue_peek(this._buffer)));
 
     } else {
       this.wait(action, true);
@@ -138,14 +138,14 @@ class Stream {
   pull(action) {
     // If there is stuff in the buffer
     if (this._buffer.length) {
-      const value = this._buffer.pull();
+      const value = queue_pull(this._buffer);
 
       const pushers = this._pushers;
 
       // If there is a pending push
       if (pushers !== null && pushers["length"]) {
         const f = pushers["shift"]();
-        this._buffer.push(f.value);
+        queue_push(this._buffer, f.value);
         f.action.success(undefined);
       }
 
@@ -163,7 +163,7 @@ class Stream {
       const f = this._pullers["shift"]();
 
       if (f.push) {
-        this._buffer.push(value);
+        queue_push(this._buffer, value);
       }
 
       f.action.success(this._some(value));
@@ -171,7 +171,7 @@ class Stream {
 
     // If there is room in the buffer
     } else if (this._buffer.length < this._limit) {
-      this._buffer.push(value);
+      queue_push(this._buffer, value);
       action.success(undefined);
 
     // Buffer is full
