@@ -3,7 +3,7 @@
 ----
 (TYPE (Lazy a))
 
-(FFI-IMPORT "Lazy"
+(FFI-IMPORT "FFI/Lazy"
   (lazy :: (-> (-> a) (Lazy a)))
   (force :: (-> (Lazy a) a)))
 ----

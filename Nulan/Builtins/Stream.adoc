@@ -55,30 +55,27 @@
             (DO (f value)
                 (loop))))))
 
-(FUNCTION
-  (merge :: (-> @(Stream a) (Stream a)))
-  (merge @s)
-    (make-stream -> out
-      (ignore-concurrent
-        @(map s -> s
-           (each s -> value
-             (push! out value))))))
-
 (IMPLEMENT (Stream a)
-
   (empty)
     (make-stream -> _ void)
-
 
   (map in f)
     (make-stream -> out
       (each in -> value
         (push! out (f value))))
 
-
   (concat @s)
     (make-stream -> out
       (ignore-sequential
+        @(map s -> s
+           (each s -> value
+             (push! out value))))))
+
+(FUNCTION
+  (merge :: (-> @(Stream a) (Stream a)))
+  (merge @s)
+    (make-stream -> out
+      (ignore-concurrent
         @(map s -> s
            (each s -> value
              (push! out value))))))

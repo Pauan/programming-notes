@@ -30,8 +30,8 @@
 (FUNCTION
   "When executed, executes the `Task`, but if it takes longer than a certain
    number of milliseconds, the `Task` is killed."
-  (timeout :: (-> Integer (Task Void) (Task Void)))
-  (timeout ms task)
+  (timeout :: (-> (Task Void) Integer (Task Void)))
+  (timeout task ms)
     (fastest task (delay ms)))
 
 (FUNCTION

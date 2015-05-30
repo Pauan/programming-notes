@@ -242,6 +242,18 @@ const pull1 = (s) =>
 //////////////////////////////////////////////////////////////////////////////
 
 
+/*const main = () =>
+  ignore_concurrent([
+    pipe_stdout(map(zero, (v) => "" + v)),
+    pipe_stdout(map(one, (v) => "" + v))
+  ]);*/
+
+/*const main = () =>
+  ignore_concurrent([
+    each(stdin, (v) => log("1 " + v)),
+    each(stdin, (v) => log("2 " + v))
+  ]);*/
+
 //const main = () => _void;
 
 //run_thread(_finally(_void, _void)).kill();
@@ -307,9 +319,9 @@ const pull1 = (s) =>
 /*const main = () =>
   fs_rename("/home/pauan/Scratch/tmp/foo", "/home/pauan/Scratch/tmp/foo3");*/
 
-const main = () =>
+/*const main = () =>
   _bind(benchmark(_bind(fs_remove("/home/pauan/Scratch/tmp/foo"), (_) =>
-                    fs_copy_file("/home/pauan/Scratch/2014-09-30", "/home/pauan/Scratch/tmp/foo"))), log);
+                    fs_copy_file("/home/pauan/Scratch/2014-09-30", "/home/pauan/Scratch/tmp/foo"))), log);*/
 
 /*let i = 1013;
 while (i--) {
