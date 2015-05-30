@@ -12,8 +12,8 @@
         | sequential
         | concurrent
         | fastest
-        | log
-        | warn }
+        | log! = log
+        | warn! = warn }
 
   (FFI-IMPORT "FFI/Task"
     _void :: (Task Void)
@@ -141,9 +141,9 @@
      [source,nulan]
      ----
      # Logs 1, then 2, then 3 to the console
-     (DO (log "1")
-         (log "2")
-         (log "3"))
+     (DO (log! "1")
+         (log! "2")
+         (log! "3"))
      ----"
     (log :: (-> String (Task Void)))
 
@@ -153,15 +153,15 @@
 
      ''''
 
-     The difference between `log` and `warn` is: `warn` will indicate in
-     some way that it is a warning, whereas `log` is for normal output.
+     The difference between `log!` and `warn!` is: `warn!` will indicate in
+     some way that it is a warning, whereas `log!` is for normal output.
 
      [source,nulan]
      ----
      # Logs 1, then 2, then 3 to the console
-     (DO (warn "1")
-         (warn "2")
-         (warn "3"))
+     (DO (warn! "1")
+         (warn! "2")
+         (warn! "3"))
      ----"
     (warn :: (-> String (Task Void))))
 

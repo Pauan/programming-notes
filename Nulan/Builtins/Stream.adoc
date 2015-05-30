@@ -94,12 +94,12 @@
           void))))
 
 (FUNCTION
-  (foldl :: (-> a
-                (Stream b)
-                # TODO maybe the function should return `a` rather than `(Task a)` ?
-                (-> a b (Task a))
-                (Task a)))
-  (foldl init s f)
+  (foldl :: (-> (Stream a)
+                b
+                # TODO maybe the function should return `b` rather than `(Task b)` ?
+                (-> b a (Task b))
+                (Task b)))
+  (foldl s init f)
     (with-stream s -> in
       (LOOP old = init
         (DO-MATCH (pull! in)
@@ -113,7 +113,7 @@
   # TODO is this correct ?
   (join :: (-> (Stream a) (Task a)))
   (join in)
-    (foldl (empty) in -> old new
+    (foldl in (empty) -> old new
       (wrap (concat old new))))
 
 (FUNCTION
@@ -157,9 +157,9 @@
 (FUNCTION
   (accumulate :: (-> (Stream Integer) (Task Integer)))
   (accumulate in)
-    (foldl 0 in -> old value
+    (foldl in 0 -> old value
       (LET new = (add old value)
-        (DO (log new)
+        (DO (log! new)
             (wrap new)))))
 
 

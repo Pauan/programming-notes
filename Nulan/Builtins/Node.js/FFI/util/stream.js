@@ -93,7 +93,7 @@ export const read_from_Node = (input, output) => (action) => {
   onReadable();
 };
 
-export const write_to_Node = (input, output) => (action) => {
+export const write_to_Node = (input, output, opts) => (action) => {
   let cleaned = false;
   let closed  = false;
 
@@ -130,8 +130,13 @@ export const write_to_Node = (input, output) => (action) => {
       } else {
         // We set this just in case `onDrain` ends up getting called
         closed = true;
-        // We don't cleanup, because that's handled by `onFinish`
-        output["end"]();
+
+        if (opts.end) {
+          // We don't cleanup, because that's handled by `onFinish`
+          output["end"]();
+        } else {
+          onFinish();
+        }
       }
     }
   };

@@ -49,14 +49,14 @@ export const fs_read_file = (path) =>
 /*export const write_file = (path, input) =>
   with_stream(input, some, none, (input) =>
     with_temporary_file((tmp_path, fd) =>
-      _bind(write_to_Node(input, fs_writeStream(fd)), (_) =>
+      _bind(write_to_Node(input, fs_writeStream(fd), { end: true }), (_) =>
         with_writing(path, () =>
           replace_file(fd, tmp_path, path)))));*/
 
-export const fs_make_file = (path, input) =>
+export const fs_make_file = (input, path) =>
   with_stream(input, some, none, (input) =>
     fs_with_open(path, "wx", (fd) =>
-      write_to_Node(input, fs_writeStream(fd))));
+      write_to_Node(input, fs_writeStream(fd), { end: true })));
 
 export const fs_make_symlink = (from, to) => (action) => {
   symlink(from, to, callback(action));

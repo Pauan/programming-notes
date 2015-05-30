@@ -19,10 +19,10 @@
         | fs-files = fs_files
         | fs-files-recursive = fs_files_recursive }
 
-  (FFI-IMPORT "fs"
+  (FFI-IMPORT "FFI/fs"
     (fs_read_file :: (-> String (Stream String)))
 
-    (fs_make_file :: (-> String (Stream String) (Task Void)))
+    (fs_make_file :: (-> (Stream String) String (Task Void)))
 
     (fs_make_symlink :: (-> String String (Task Void)))
 
@@ -56,7 +56,9 @@
                        (Task Void)))
   (fs-map-file! file f)
     (fs-with-temporary-path -> x
-      (DO (fs-make-file! x (f (fs-read-file file)))
+      (DO (<< (fs-read-file file)
+              (f)
+              (fs-make-file! x))
           (fs-replace-file! x file))))
 ----
 
@@ -67,9 +69,9 @@
 # then converts each line to uppercase,
 # then keeps only the lines that are equal to "TEST",
 # then writes those lines to the file "bar"
-(>> (<< (fs-read-file "foo")
-        (split-lines)
-        (map uppercase)
-        (keep -> s (equal? s "TEST")))
+(<< (fs-read-file "foo")
+    (split-lines)
+    (map uppercase)
+    (keep -> s (equal? s "TEST"))
     (fs-make-file! "bar"))
 ----

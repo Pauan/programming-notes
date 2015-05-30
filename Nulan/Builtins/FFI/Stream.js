@@ -17,7 +17,6 @@ class Stream {
     this._some = some;
     this._none = none;
 
-    this._thread = null;
     // TODO do we need to use arrays ? is it possible for there to be more than 1 puller/pusher at a time ?
     this._pullers = []; // TODO maybe use a Queue ?
     this._pushers = []; // TODO maybe use a Queue ?
@@ -53,7 +52,6 @@ class Stream {
 
       this._limit = null;
 
-      this._thread = null;
       this._pullers = null;
       this._pushers = null;
 
@@ -73,20 +71,18 @@ class Stream {
     }
   }
 
-  done_pulling(action) {
+  done_pulling(action, thread) {
     // Sanity check to make sure that there aren't any pending pulls
     if (this._pullers !== null && this._pullers["length"]) {
       invalid(action);
 
     } else {
       const pushers = this._pushers;
-      const thread = this._thread;
 
       this._limit = null;
       this._some = null;
       this._none = null;
 
-      this._thread = null;
       this._pullers = null;
       this._buffer = null;
 
@@ -95,11 +91,9 @@ class Stream {
       this.push = invalid;
       this.done_pulling = invalid;
 
-      if (thread !== null) {
-        thread.terminate();
-      }
+      thread.terminate();
 
-      // This has to go after termination
+      // This has to go after termination, (see `action.onTerminate` of `push`)
       this._pushers = null;
 
       // TODO is this check a good idea ?
@@ -208,8 +202,8 @@ const done_pushing = (stream) => (action) => {
   stream.done_pushing(action);
 };
 
-const done_pulling = (stream) => (action) => {
-  stream.done_pulling(action);
+const done_pulling = (stream, thread) => (action) => {
+  stream.done_pulling(action, thread);
 };
 
 export const make_stream = (f) => f;
@@ -217,14 +211,22 @@ export const make_stream = (f) => f;
 export const with_stream = (stream, some, none, f) => (action) => {
   const s = new Stream(DEFAULT_STREAM_LIMIT, some, none);
 
-  s._thread = run(_finally(stream(s), done_pushing(s)), noop, (e) => {
-    t.terminate();
+  // This is similar to using `concurrent`, except
+  // that `done_pulling` terminates `t1`
+  const t1 = run(_finally(stream(s), done_pushing(s)), noop, (e) => {
+    t2.terminate();
     action.error(e);
   });
 
-  // TODO should this be before or after `s._thread` ?
-  const t = run(_finally(f(s), done_pulling(s)), action.success, action.error);
+  const t2 = run(_finally(f(s), done_pulling(s, t1)), action.success, action.error);
+
+  action.onTerminate = () => {
+    // TODO should it terminate the pusher or the puller first ?
+    t1.terminate();
+    t2.terminate();
+  };
 };
+
 
 export const peek = (stream) => (action) => {
   stream.peek(action);

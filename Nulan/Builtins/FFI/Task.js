@@ -27,21 +27,25 @@ if (typeof process === "object" && typeof process["on"] === "function") {
 }
 
 
-const cleanup_success = (value) => {
+const cleanup_success2 = (value) => {
   // TODO pretty printing for value
-  print_warning("action succeeded after completing: " + value);
+  print_warning("Task succeeded after completing: " + value);
+};
+
+const cleanup_success1 = function (_) {
+  this.success = cleanup_success2;
 };
 
 const cleanup_error = (e) => {
-  print_warning("action errored after completing:");
+  print_warning("Task errored after completing:");
   print_error(e);
 };
 
 const cleanup_terminate = () => {
-  // TODO should this print a warning if `terminate` is called twice ?
   return false;
 };
 
+// TODO is it faster or slower to overwrite the properties, compared to keeping track of whether the Task is completed or not ?
 const cleanup = (action, success) => {
   action.success = success;
   action.error = cleanup_error;
@@ -59,7 +63,7 @@ export const run = (task, onSuccess, onError) => {
       // TODO convenience function for this
       //TASK_RUN_STACK["push"](new Error("")["stack"]["split"](/\n */)[2]);
 
-      cleanup(action, cleanup_success);
+      cleanup(action, cleanup_success2);
 
       async(() => {
         onSuccess(value);
@@ -68,7 +72,7 @@ export const run = (task, onSuccess, onError) => {
     },
 
     error: (e) => {
-      cleanup(action, cleanup_success);
+      cleanup(action, cleanup_success2);
 
       async(() => {
         onError(e);
@@ -80,7 +84,7 @@ export const run = (task, onSuccess, onError) => {
       const f = action.onTerminate;
 
       // It's okay for an action to succeed after termination
-      cleanup(action, noop);
+      cleanup(action, cleanup_success1);
 
       // Not every action supports termination
       if (f !== null) {
@@ -106,7 +110,6 @@ export const Task_from_Promise = (f) => (action) => {
   f()["then"](action.success, action.error);
 };
 
-// TODO how to handle the task/promise being terminated ?
 export const Promise_from_Task = (task) =>
   new Promise((resolve, reject) => {
     run(task, resolve, reject);
@@ -131,6 +134,7 @@ const block_task = (action) => {
 };
 
 // TODO test this
+// TODO get rid of this once the Node.js "beforeExit" event works ?
 export const block = () => {
   // This is necessary to prevent Node.js from exiting before the tasks are complete
   // TODO is there a more efficient way to do this ?
