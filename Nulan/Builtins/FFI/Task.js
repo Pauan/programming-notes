@@ -27,73 +27,81 @@ if (typeof process === "object" && typeof process["on"] === "function") {
 }
 
 
-const cleanup_success2 = (value) => {
-  // TODO pretty printing for value
-  print_warning("Task succeeded after completing: " + value);
-};
-
-const cleanup_success1 = function (_) {
-  this.success = cleanup_success2;
-};
-
-const cleanup_error = (e) => {
-  print_warning("Task errored after completing:");
-  print_error(e);
-};
-
-const cleanup_terminate = () => {
-  return false;
-};
-
-// TODO is it faster or slower to overwrite the properties, compared to keeping track of whether the Task is completed or not ?
-const cleanup = (action, success) => {
-  action.success = success;
-  action.error = cleanup_error;
-  action.terminate = cleanup_terminate;
-  action.onTerminate = null;
-};
+const PENDING   = 0;
+const SUCCEEDED = 1;
+const ERRORED   = 2;
+const KILLED    = 3;
 
 export const run = (task, onSuccess, onError) => {
   ++RUNNING_TASKS;
 
+  let state = PENDING;
+
   const action = {
+    // TODO how to prevent code from assigning to this after the action is completed ?
     onTerminate: null,
 
     success: (value) => {
-      // TODO convenience function for this
-      //TASK_RUN_STACK["push"](new Error("")["stack"]["split"](/\n */)[2]);
+      if (state === PENDING) {
+        state = SUCCEEDED;
+        action.onTerminate = null;
 
-      cleanup(action, cleanup_success2);
+        // TODO convenience function for this
+        //TASK_RUN_STACK["push"](new Error("")["stack"]["split"](/\n */)[2]);
 
-      async(() => {
-        onSuccess(value);
-        --RUNNING_TASKS;
-      });
+        async(() => {
+          onSuccess(value);
+          --RUNNING_TASKS;
+        });
+
+      // It's okay for an action to succeed after termination
+      } else if (state === KILLED) {
+        // It's okay to succeed after termination... but only once
+        // TODO this works for now, but a more robust solution would be nice
+        state = SUCCEEDED;
+
+      } else {
+        // TODO pretty printing for value
+        print_warning("Task succeeded after completing: " + value);
+      }
     },
 
     error: (e) => {
-      cleanup(action, cleanup_success2);
+      if (state === PENDING) {
+        state = ERRORED;
+        action.onTerminate = null;
 
-      async(() => {
-        onError(e);
-        --RUNNING_TASKS;
-      });
+        async(() => {
+          onError(e);
+          --RUNNING_TASKS;
+        });
+
+      } else {
+        print_warning("Task errored after completing:");
+        print_error(e);
+      }
     },
 
     terminate: () => {
-      const f = action.onTerminate;
+      if (state === PENDING) {
+        state = KILLED;
 
-      // It's okay for an action to succeed after termination
-      cleanup(action, cleanup_success1);
+        const f = action.onTerminate;
 
-      // Not every action supports termination
-      if (f !== null) {
-        // We can't use `async` (see e.g. _finally, _bind, etc.)
-        f();
+        action.onTerminate = null;
+
+        // Not every action supports termination
+        if (f !== null) {
+          // We can't use `async` (see e.g. _finally, _bind, etc.)
+          f();
+        }
+
+        --RUNNING_TASKS;
+        return true;
+
+      } else {
+        return false;
       }
-
-      --RUNNING_TASKS;
-      return true;
     }
   };
 

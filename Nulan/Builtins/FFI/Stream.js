@@ -218,10 +218,11 @@ export const with_stream = (stream, some, none, f) => (action) => {
     action.error(e);
   });
 
+  // TODO it asynchronously terminates `t1` ... is that okay ?
   const t2 = run(_finally(f(s), done_pulling(s, t1)), action.success, action.error);
 
   action.onTerminate = () => {
-    // TODO should it terminate the pusher or the puller first ?
+    // TODO should it terminate both of them, or only `t2` ?
     t1.terminate();
     t2.terminate();
   };

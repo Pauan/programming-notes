@@ -156,12 +156,12 @@ const one =
 const increment = (i) =>
   _bind(log(i), (_) => increment(i + 1));
 
-const pull1 = (s, f) =>
+const push1 = (s) =>
+  make_stream((out) => push(out, s));
+
+const pull1 = (s) =>
   with_stream(s, some, none, (s) =>
-    _bind(pull(s), (v) =>
-      (v["length"]
-        ? f(v[0])
-        : _void)));
+    ignore(pull(s)));
 
 
 //////////////////////////////////////////////////////////////////////////////
@@ -216,19 +216,24 @@ const pull1 = (s, f) =>
 
 //////////////////////////////////////////////////////////////////////////////
 
+/*const main = () =>
+  pull1(map(one, (value) => value + 1));*/
 
 const main = () =>
-  pull1(pipe(empty, "ls", []), log);
+  pull1(pipe(push1("foo"), "grep", ["foo"]));
 
 /*const main = () =>
-  pipe_stdout(pipe(empty, "ls", []));*/
+  each(pipe(empty(), "ls", []), log);*/
 
 /*const main = () =>
-  pipe_stdout(merge([pipe(empty, "echo", ["hello"]),
-                     pipe(empty, "echo", ["world"])]));*/
+  pipe_stdout(pipe(empty(), "ls", []));*/
 
 /*const main = () =>
-  pipe_stdout(pipe(pipe_ignore_status(pipe(empty,
+  pipe_stdout(merge([pipe(empty(), "echo", ["hello"]),
+                     pipe(empty(), "echo", ["world"])]));*/
+
+/*const main = () =>
+  pipe_stdout(pipe(pipe_ignore_status(pipe(empty(),
     "find", [_arguments[0], "-type", "f", "-print0"]),
     "xargs", ["-0", "grep", "foo"]),
     "wc", ["-l"]));*/
@@ -236,6 +241,8 @@ const main = () =>
 
 //////////////////////////////////////////////////////////////////////////////
 
+
+//const main = () => _void;
 
 //run_thread(_finally(_void, _void)).terminate();
 
@@ -245,8 +252,6 @@ const main = () =>
 /*const main = () =>
   accumulate(merge([generate_add(0, 1),
                     generate_multiply(1, 2)]));*/
-
-//const main = () => _void;
 
 /*const main = () =>
   forever(success(5));*/
