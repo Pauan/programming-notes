@@ -1,0 +1,81 @@
+.fs.nu
+[source]
+----
+(USE {} = "nulan:Task")
+(USE {} = "nulan:List")
+(USE {} = "nulan:String")
+(USE {} = "nulan:Stream")
+
+(EXPORT { pipe! = pipe
+        | pipe-ignore-status! = pipe_ignore_status
+        | stdin
+        | pipe-stdout! = pipe_stdout
+        | pipe-stderr! = pipe_stderr
+        | current-directory = current_directory
+        | with-directory! = with_directory
+        | arguments = _arguments }
+
+  (FFI-IMPORT "FFI/script"
+    stdin :: (Stream String)
+    (pipe_stdout :: (-> (Stream String) (Task Void)))
+    (pipe_stderr :: (-> (Stream String) (Task Void)))
+
+    _arguments :: (List String)
+
+    current_directory :: (Task String)
+    (with_directory :: (-> String (Task a) (Task a)))
+
+    (pipe :: (-> (Stream String) String @String (Stream String)))
+    (pipe-ignore-status :: (-> (Stream String) String @String (Stream String)))))
+
+
+(FUNCTION
+  (run! :: (-> String @String (Stream String)))
+  (run! cmd @args)
+    (pipe! (empty) cmd @args))
+
+(FUNCTION
+  (run-ignore-status! :: (-> String @String (Stream String)))
+  (run-ignore-status! cmd @args)
+    (pipe-ignore-status! (empty) cmd @args))
+----
+
+.Examples
+[source]
+----
+# Reads the file "foo",
+# then keeps only the lines that contain the text "bar" (using `grep`),
+# then prints the lines to `stdout` (using `less`)
+(<< (read-file "foo")
+    # We have to use `pipe-ignore-status!` because "grep"
+    # returns 1 if the pattern does not match
+    (pipe-ignore-status! "grep" "bar")
+    (pipe! "less")
+    (pipe-stdout!))
+
+
+# Prints "hello" and "world" in a non-deterministic order to `stdout`
+(<< (merge (run! "echo" "hello")
+           (run! "echo" "world"))
+    (pipe-stdout!))
+
+
+# Redirects `stdin` to the file "foo"
+(<< stdin
+    (make-file! "foo"))
+
+
+# When executing the script from the command line,
+# `arguments` contains the arguments to the script.
+#
+# This code uses pattern matching to extract the first
+# two arguments (`x` and `y`).
+#
+# It then reads the files `x` and `y`, concatenates the
+# file contents, then prints the concatenated contents
+# to `stdout`.
+(LET (*list x y) = arguments
+  (<< (concat (read-file x)
+              (read-file y))
+      (pipe-stdout!)))
+----
