@@ -11,7 +11,7 @@
         | make-directory! = make_directory
 
         | remove! = remove
-        | rename! = rename
+        | move! = move
         | copy! = copy
         | replace-file! = replace_file
 
@@ -32,7 +32,7 @@
 
     (remove :: (-> String (Task Void)))
 
-    (rename :: (-> String String (Task Void)))
+    (move :: (-> String String (Task Void)))
 
     (copy :: (-> String String (Task Void)))
 
@@ -52,8 +52,8 @@
 
 (FUNCTION
   (map-file! :: (-> String
-                       (-> (Stream String) (Stream String))
-                       (Task Void)))
+                    (-> (Stream String) (Stream String))
+                    (Task Void)))
   (map-file! file f)
     (with-temporary-path -> x
       (DO (<< (read-file file)

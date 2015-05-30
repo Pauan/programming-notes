@@ -1,7 +1,7 @@
 import { _void, run_root, _bind, success, error, log, never, concurrent, protect_kill, _finally, fastest, run_thread, sequential } from "../FFI/Task";
 import { delay, current_time } from "../FFI/Time";
 import { pull, make_stream, with_stream, push, some, none } from "../FFI/Stream";
-import { read_file, make_file, all_files_in_directory, remove, copy, rename, replace_file, with_temporary_directory } from "../Node.js/FFI/fs";
+import { read_file, make_file, all_files_in_directory, remove, copy, move, replace_file, with_temporary_directory } from "../Node.js/FFI/fs";
 import { path, is_hidden_file } from "../Node.js/FFI/path";
 import { pipe, pipe_ignore_status, _arguments, stdin, pipe_stdout } from "../Node.js/FFI/script";
 
@@ -317,7 +317,7 @@ const pull1 = (s) =>
       s["toLocaleUpperCase"]()));*/
 
 /*const main = () =>
-  rename("/home/pauan/Scratch/tmp/foo", "/home/pauan/Scratch/tmp/foo3");*/
+  move("/home/pauan/Scratch/tmp/foo", "/home/pauan/Scratch/tmp/foo3");*/
 
 /*const main = () =>
   _bind(benchmark(_bind(remove("/home/pauan/Scratch/tmp/foo"), (_) =>

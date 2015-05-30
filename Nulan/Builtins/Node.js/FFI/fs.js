@@ -49,7 +49,7 @@ export const remove = (path) => (action) => {
 };
 
 // TODO handle being killed
-export const rename = (from, to) => (action) => {
+export const move = (from, to) => (action) => {
   fs_rename_safe(from, to, callback(action));
 };
 
