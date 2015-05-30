@@ -50,8 +50,7 @@ export const fs_read_file = (path) =>
   with_stream(input, some, none, (input) =>
     with_temporary_file((tmp_path, fd) =>
       _bind(write_to_Node(input, fs_writeStream(fd), { end: true }), (_) =>
-        with_writing(path, () =>
-          replace_file(fd, tmp_path, path)))));*/
+        replace_file(fd, tmp_path, path))));*/
 
 export const fs_make_file = (input, path) =>
   with_stream(input, some, none, (input) =>

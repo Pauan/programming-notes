@@ -41,15 +41,6 @@
       (with_stream s *some *none f)))
 
 
-#/(FUNCTION
-  (pipe-stream :: (-> (Stream a)
-                      (-> (Output a) (Input b) (Task Void))
-                      (Stream b)))
-  (pipe-stream s f)
-    (make-stream -> out
-      (with-stream s -> in
-        (f in out))))/#
-
 (FUNCTION
   (each :: (-> (Stream a)
                (-> a (Task Void))
@@ -73,14 +64,18 @@
            (each s -> value
              (push! out value))))))
 
-(FUNCTION
-  (map :: (-> (Stream a)
-              (-> a b)
-              (Stream b)))
+(IMPLEMENT (Stream a)
   (map in f)
     (make-stream -> out
       (each in -> value
-        (push! out (f value)))))
+        (push! out (f value))))
+
+  (concat @s)
+    (make-stream -> out
+      (ignore-sequential
+        @(map s -> s
+           (each s -> value
+             (push! out value))))))
 
 (FUNCTION
   (keep :: (-> (Stream a)
@@ -109,6 +104,7 @@
             (DO new = (f old value)
                 (loop new))))))
 
+# TODO maybe convert the Stream into a List, and then use (concat @list) ?
 (FUNCTION
   # TODO is this correct ?
   (join :: (-> (Stream a) (Task a)))
@@ -126,6 +122,7 @@
           @(map value -> value
              (push! out value))))))
 
+# TODO this is probably incorrect
 (FUNCTION
   (split-lines :: (-> (Stream String) (Stream String)))
   (split-lines in)
