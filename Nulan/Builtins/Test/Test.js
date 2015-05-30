@@ -103,7 +103,7 @@ const generate = (init, f) =>
 
 // fs.adoc
 const fs_copy_file = (from, to) =>
-  fs_make_file(to, fs_read_file(from));
+  fs_make_file(fs_read_file(from), to);
 
 const fs_with_temporary_path = (f) =>
   fs_with_temporary_directory((dir) =>
@@ -111,7 +111,7 @@ const fs_with_temporary_path = (f) =>
 
 const fs_map_file = (file, f) =>
   fs_with_temporary_path((x) =>
-    _bind(fs_make_file(x, f(fs_read_file(file))), (_) =>
+    _bind(fs_make_file(f(fs_read_file(file)), x), (_) =>
       fs_replace_file(x, file)));
 
 
@@ -219,8 +219,8 @@ const pull1 = (s) =>
 /*const main = () =>
   pull1(map(one, (value) => value + 1));*/
 
-const main = () =>
-  pull1(pipe(push1("foo"), "grep", ["foo"]));
+/*const main = () =>
+  pull1(pipe(push1("foo"), "grep", ["foo"]));*/
 
 /*const main = () =>
   each(pipe(empty(), "ls", []), log);*/
@@ -307,9 +307,9 @@ const main = () =>
 /*const main = () =>
   fs_rename("/home/pauan/Scratch/tmp/foo", "/home/pauan/Scratch/tmp/foo3");*/
 
-/*const main = () =>
+const main = () =>
   _bind(benchmark(_bind(fs_remove("/home/pauan/Scratch/tmp/foo"), (_) =>
-                    fs_copy("/home/pauan/Scratch/2014-09-30", "/home/pauan/Scratch/tmp/foo"))), log);*/
+                    fs_copy_file("/home/pauan/Scratch/2014-09-30", "/home/pauan/Scratch/tmp/foo"))), log);
 
 /*let i = 1013;
 while (i--) {

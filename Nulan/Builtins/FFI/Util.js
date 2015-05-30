@@ -114,6 +114,9 @@ export const nextTick =
     : (f) => { setTimeout(f, 0) });  // ~750
 */
 
+// TODO if this just calls `f` without using `setImmediate`,
+//      it's significantly faster, but overflows are now possible,
+//      and infinite loops can't be stopped
 const nextTick = (f) => {
   setImmediate(f);
 };
