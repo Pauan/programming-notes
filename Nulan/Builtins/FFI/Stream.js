@@ -91,15 +91,15 @@ class Stream {
       this.push = invalid;
       this.done_pulling = invalid;
 
-      thread.terminate();
+      thread.kill();
 
-      // This has to go after termination, (see `action.onTerminate` of `push`)
+      // This has to go after killing the thread, (see `action.onKilled` of `push`)
       this._pushers = null;
 
       // TODO is this check a good idea ?
       // TODO isn't this handled by done_pushing ?
       if (pushers !== null && pushers["length"]) {
-        action.error(new Error("There are still " + pushers["length"] + " pending pushes after termination"));
+        action.error(new Error("There are still " + pushers["length"] + " pending pushes after being killed"));
       } else {
         action.success(undefined);
       }
@@ -119,7 +119,7 @@ class Stream {
 
       this.push_puller(info);
 
-      action.onTerminate = () => {
+      action.onKilled = () => {
         // TODO is it possible for `this._pullers` to be `null` ?
         array_remove(this._pullers, info);
       };
@@ -183,7 +183,7 @@ class Stream {
 
       this.push_pusher(info);
 
-      action.onTerminate = () => {
+      action.onKilled = () => {
         array_remove(this._pushers, info);
       };
     }
@@ -211,20 +211,20 @@ export const make_stream = (f) => f;
 export const with_stream = (stream, some, none, f) => (action) => {
   const s = new Stream(DEFAULT_STREAM_LIMIT, some, none);
 
-  // This is similar to using `concurrent`, except
-  // that `done_pulling` terminates `t1`
+  // This is similar to using `concurrent`,
+  // except that `done_pulling` kills `t1`
   const t1 = run(_finally(stream(s), done_pushing(s)), noop, (e) => {
-    t2.terminate();
+    t2.kill();
     action.error(e);
   });
 
-  // TODO it asynchronously terminates `t1` ... is that okay ?
+  // TODO it asynchronously kills `t1` ... is that okay ?
   const t2 = run(_finally(f(s), done_pulling(s, t1)), action.success, action.error);
 
-  action.onTerminate = () => {
-    // TODO should it terminate both of them, or only `t2` ?
-    t1.terminate();
-    t2.terminate();
+  action.onKilled = () => {
+    // TODO should it kill both of them, or only `t2` ?
+    t1.kill();
+    t2.kill();
   };
 };
 

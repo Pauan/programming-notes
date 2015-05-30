@@ -2,12 +2,12 @@
 const http_request = (type, url) => (action) => {
   var req = new XMLHttpRequest();
 
-  let terminated = false;
+  let killed = false;
 
   // TODO what about the "timeout" event ?
   req["addEventListener"]("abort", () => {
     // TODO is this necessary ?
-    if (!terminated) {
+    if (!killed) {
       action.error(new Error(type + " request to URL '" + url + "' was aborted"));
     }
   }, true);
@@ -33,8 +33,8 @@ const http_request = (type, url) => (action) => {
   req["open"](type, url, true);
   req["send"]();
 
-  action.onTerminate = () => {
-    terminated = true;
+  action.onKilled = () => {
+    killed = true;
     // TODO test this
     req["abort"]();
   };

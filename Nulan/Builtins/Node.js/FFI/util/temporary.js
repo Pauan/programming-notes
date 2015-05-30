@@ -63,7 +63,7 @@ export const make_temporary_directory = (cb) => {
   _finally(fs_close(fd), fs_unlink_safe(path));
 
 export const with_temporary_file = (f) =>
-  protect_terminate(temporary_file,
+  protect_kill(temporary_file,
     ([path, fd]) =>
       cleanup_temporary_file(path, fd),
     ([path, fd]) =>

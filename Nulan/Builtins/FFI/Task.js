@@ -39,12 +39,12 @@ export const run = (task, onSuccess, onError) => {
 
   const action = {
     // TODO how to prevent code from assigning to this after the action is completed ?
-    onTerminate: null,
+    onKilled: null,
 
     success: (value) => {
       if (state === PENDING) {
         state = SUCCEEDED;
-        action.onTerminate = null;
+        action.onKilled = null;
 
         // TODO convenience function for this
         //TASK_RUN_STACK["push"](new Error("")["stack"]["split"](/\n */)[2]);
@@ -54,9 +54,9 @@ export const run = (task, onSuccess, onError) => {
           --RUNNING_TASKS;
         });
 
-      // It's okay for an action to succeed after termination
+      // It's okay for an action to succeed after being killed
       } else if (state === KILLED) {
-        // It's okay to succeed after termination... but only once
+        // It's okay to succeed after being killed... but only once
         // TODO this works for now, but a more robust solution would be nice
         state = SUCCEEDED;
 
@@ -69,7 +69,7 @@ export const run = (task, onSuccess, onError) => {
     error: (e) => {
       if (state === PENDING) {
         state = ERRORED;
-        action.onTerminate = null;
+        action.onKilled = null;
 
         async(() => {
           onError(e);
@@ -82,15 +82,15 @@ export const run = (task, onSuccess, onError) => {
       }
     },
 
-    terminate: () => {
+    kill: () => {
       if (state === PENDING) {
         state = KILLED;
 
-        const f = action.onTerminate;
+        const f = action.onKilled;
 
-        action.onTerminate = null;
+        action.onKilled = null;
 
-        // Not every action supports termination
+        // Not every action supports being killed
         if (f !== null) {
           // We can't use `async` (see e.g. _finally, _bind, etc.)
           f();
@@ -113,7 +113,7 @@ export const run = (task, onSuccess, onError) => {
 
 export const noop = () => {};
 
-// There's no standard way to terminate a Promise
+// There's no standard way to kill a Promise
 export const Task_from_Promise = (f) => (action) => {
   f()["then"](action.success, action.error);
 };
@@ -188,7 +188,7 @@ export const error = (s) => {
   };
 };
 
-// TODO what if the action is terminated ?
+// TODO what if the action is killed ?
 export const never = () => (action) => {};
 
 export const _void = (action) => {
@@ -197,13 +197,13 @@ export const _void = (action) => {
 
 export const _bind = (task, f) => (action) => {
   // TODO is this necessary ?
-  let terminated = false;
+  let killed = false;
 
   const onSuccess = (value) => {
     // TODO is this correct ?
-    if (!terminated) {
+    if (!killed) {
       // TODO should this be above the `if` rather than inside it ?
-      action.onTerminate = null;
+      action.onKilled = null;
 
       // Runs the task in a tail-recursive manner, so that it consumes a
       // constant amount of memory, even if it's an infinite loop
@@ -216,39 +216,40 @@ export const _bind = (task, f) => (action) => {
   (function () {
     const a = run(task, onSuccess, action.error);
 
-    action.onTerminate = () => {
-      terminated = true;
-      a.terminate();
+    action.onKilled = () => {
+      killed = true;
+      a.kill();
     };
   })();
 };
 
-export const protect_terminate = (task, onTerminated, onSuccess) => (action) => {
-  let terminated = false;
+// TODO could use a better name
+export const protect_kill = (task, onKilled, onSuccess) => (action) => {
+  let killed = false;
 
-  // This is always run, even if it's terminated
+  // This is always run, even if it's killed
   run(task, (value) => {
-    action.onTerminate = null;
+    action.onKilled = null;
 
-    if (terminated) {
-      // This is always run, even if it's terminated
-      run(onTerminated(value), noop, action.error);
+    if (killed) {
+      // This is always run, even if it's killed
+      run(onKilled(value), noop, action.error);
     } else {
       onSuccess(value)(action);
     }
   }, action.error);
 
-  action.onTerminate = () => {
-    terminated = true;
+  action.onKilled = () => {
+    killed = true;
   };
 };
 
 export const _finally = (before, after) => (action) => {
   const onSuccess = (value) => {
     // TODO is this necessary to prevent a memory leak ?
-    action.onTerminate = null;
+    action.onKilled = null;
 
-    // This task is run no matter what, even if it is terminated
+    // This task is run no matter what, even if it is killed
     run(after, (_) => {
       action.success(value);
     }, action.error);
@@ -256,9 +257,9 @@ export const _finally = (before, after) => (action) => {
 
   const onError = (e) => {
     // TODO is this necessary to prevent a memory leak ?
-    action.onTerminate = null;
+    action.onKilled = null;
 
-    // This task is run no matter what, even if it is terminated
+    // This task is run no matter what, even if it is killed
     run(after, (_) => {
       action.error(e);
     }, action.error);
@@ -269,9 +270,9 @@ export const _finally = (before, after) => (action) => {
   (function () {
     const t = run(before, onSuccess, onError);
 
-    action.onTerminate = () => {
-      if (t.terminate()) {
-        // This task is run no matter what, even if it is terminated
+    action.onKilled = () => {
+      if (t.kill()) {
+        // This task is run no matter what, even if it is killed
         // There's nothing to return, so we use `noop`
         // TODO can this be implemented as `after(action)` ?
         run(after, noop, action.error);
@@ -280,10 +281,10 @@ export const _finally = (before, after) => (action) => {
   })();
 };
 
-export const terminateAll = (actions) => {
+export const killAll = (actions) => {
   // TODO is it faster to use a var or a let ?
   for (let i = 0; i < actions["length"]; ++i) {
-    actions[i].terminate();
+    actions[i].kill();
   }
 };
 
@@ -292,15 +293,15 @@ export const terminateAll = (actions) => {
 export const sequential = (a) => (action) => {
   const out = new Array(a["length"]);
 
-  let terminated = false;
+  let killed = false;
 
   const loop = (i) => {
     if (i < a["length"]) {
       const onSuccess = (value) => {
         // TODO is this necessary ?
-        if (!terminated) {
+        if (!killed) {
           // TODO is this necessary ?
-          action.onTerminate = null;
+          action.onKilled = null;
           out[i] = value;
           loop(i + 1);
         }
@@ -311,9 +312,9 @@ export const sequential = (a) => (action) => {
       (function () {
         const t = run(a[i], onSuccess, action.error);
 
-        action.onTerminate = () => {
-          terminated = true;
-          t.terminate();
+        action.onKilled = () => {
+          killed = true;
+          t.kill();
         };
       })();
 
@@ -335,10 +336,10 @@ export const concurrent = (a) => (action) => {
 
   let failed = false;
 
-  const onTerminate = () => {
+  const onKilled = () => {
     if (!failed) {
       failed = true;
-      terminateAll(actions);
+      killAll(actions);
     }
   };
 
@@ -352,7 +353,7 @@ export const concurrent = (a) => (action) => {
   };
 
   const onError = (e) => {
-    onTerminate();
+    onKilled();
     // Always emit all the errors
     // The error that is emitted first is non-deterministic
     action.error(e);
@@ -369,7 +370,7 @@ export const concurrent = (a) => (action) => {
     actions["push"](t);
   }
 
-  action.onTerminate = onTerminate;
+  action.onKilled = onKilled;
 };
 
 // TODO verify that this works correctly in all situations
@@ -378,20 +379,20 @@ export const fastest = (a) => (action) => {
 
   let done = false;
 
-  const onTerminate = () => {
+  const onKilled = () => {
     if (!done) {
       done = true;
-      terminateAll(actions);
+      killAll(actions);
     }
   };
 
   const onSuccess = (value) => {
-    onTerminate();
+    onKilled();
     action.success(value);
   };
 
   const onError = (e) => {
-    onTerminate();
+    onKilled();
     // Always emit all the errors
     // The error that is emitted first is non-deterministic
     action.error(e);
@@ -403,7 +404,7 @@ export const fastest = (a) => (action) => {
     actions["push"](run(a[i], onSuccess, onError));
   }
 
-  action.onTerminate = onTerminate;
+  action.onKilled = onKilled;
 };
 
 

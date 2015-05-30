@@ -80,7 +80,7 @@
     "When executed, executes all the `Task`s in parallel, and when they're all
      finished, returns a `List` of the return values of the `Task`s.
 
-     If any of the `Task`s errors, the remaining `Task`s are terminated.
+     If any of the `Task`s errors, the remaining `Task`s are killed.
 
      ''''
 
@@ -109,7 +109,7 @@
      The `Task` that returns first is the final result.
 
      If any of the `Task`s return or error, the remaining `Task`s are
-     terminated.
+     killed.
 
      ''''
 

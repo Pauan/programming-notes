@@ -1,4 +1,4 @@
-import { _void, run_root, _bind, success, error, log, never, concurrent, protect_terminate, _finally, fastest, run_thread, sequential } from "../FFI/Task";
+import { _void, run_root, _bind, success, error, log, never, concurrent, protect_kill, _finally, fastest, run_thread, sequential } from "../FFI/Task";
 import { delay, current_time } from "../FFI/Time";
 import { pull, make_stream, with_stream, push, some, none } from "../FFI/Stream";
 import { fs_read_file, fs_make_file, fs_files_recursive, fs_remove, fs_copy, fs_rename, fs_replace_file, fs_with_temporary_directory } from "../Node.js/FFI/fs";
@@ -195,10 +195,10 @@ const pull1 = (s) =>
   with_stream(make_stream((_) => _void), some, none, (_) => _bind(delay(1000), (_) => error("foo")));*/
 
 /*const main = () =>
-  with_stream(make_stream((_) => protect_terminate(error("foo"), (_) => _void, (_) => _void)), some, none, (_) => _void);*/
+  with_stream(make_stream((_) => protect_kill(error("foo"), (_) => _void, (_) => _void)), some, none, (_) => _void);*/
 
 /*const main = () =>
-  with_stream(make_stream((_) => protect_terminate(_bind(delay(1000), (_) => error("foo")), (_) => _void, (_) => _void)), some, none, (_) => _void);*/
+  with_stream(make_stream((_) => protect_kill(_bind(delay(1000), (_) => error("foo")), (_) => _void, (_) => _void)), some, none, (_) => _void);*/
 
 /*const main = () =>
   with_stream(make_stream((s) => forever(push(s, 5))), some, none, (s) => {
@@ -244,7 +244,7 @@ const pull1 = (s) =>
 
 //const main = () => _void;
 
-//run_thread(_finally(_void, _void)).terminate();
+//run_thread(_finally(_void, _void)).kill();
 
 /*const main = () =>
   each(merge([one, zero]), log);*/
@@ -349,7 +349,7 @@ setTimeout(() => {
   });
 }, 2000);*/
 
-//run(ignore(success(10))).terminate();
+//run(ignore(success(10))).kill();
 
 /*const main = () =>
   each(read_file("/home/pauan/Scratch/2014-09-30"), log);*/

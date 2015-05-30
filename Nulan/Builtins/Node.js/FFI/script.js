@@ -62,7 +62,7 @@ export const spawn = (cmd, args, opts) => {
           on_success(code, signal, action);
         });
 
-        action.onTerminate = () => {
+        action.onKilled = () => {
           // It's bad to kill a process after it's exited
           // https://nodejs.org/api/child_process.html#child_process_child_kill_signal
           if (!finished) {

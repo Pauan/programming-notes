@@ -52,7 +52,7 @@ export const read_from_Node = (input, output) => (action) => {
     }
   };
 
-  action.onTerminate = () => {
+  action.onKilled = () => {
     cleanup();
   };
 
@@ -76,9 +76,9 @@ export const read_from_Node = (input, output) => (action) => {
         // TODO is it possible for a "readable" event to trigger even if `chunk` is not `null` ?
         const t = run(push(output, chunk), onReadable, onError);
 
-        action.onTerminate = () => {
+        action.onKilled = () => {
           cleanup();
-          t.terminate();
+          t.kill();
         };
       }
     }
@@ -108,7 +108,7 @@ export const write_to_Node = (input, output, opts) => (action) => {
     }
   };
 
-  action.onTerminate = () => {
+  action.onKilled = () => {
     // TODO should this end the output ?
     cleanup();
   };
@@ -151,10 +151,10 @@ export const write_to_Node = (input, output, opts) => (action) => {
     if (!closed) {
       const t = run(pull(input), onSuccess, onError);
 
-      action.onTerminate = () => {
+      action.onKilled = () => {
         // TODO should this end the output ?
         cleanup();
-        t.terminate();
+        t.kill();
       };
     }
   };

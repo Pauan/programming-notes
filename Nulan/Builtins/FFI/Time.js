@@ -3,7 +3,7 @@ export const delay = (ms) => (action) => {
     action.success(undefined);
   }, ms);
 
-  action.onTerminate = () => {
+  action.onKilled = () => {
     clearTimeout(timer);
   };
 };

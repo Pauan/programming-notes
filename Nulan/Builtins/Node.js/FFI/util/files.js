@@ -38,9 +38,9 @@ const push_files_recursive = (output, path, files, action, cb) => {
               inner(i + 1);
             }, cb);
 
-            action.onTerminate = () => {
-              // TODO does it need to terminate anything else ?
-              t.terminate();
+            action.onKilled = () => {
+              // TODO does it need to do anything else ?
+              t.kill();
             };
 
           } else {
@@ -66,7 +66,7 @@ const push_files_recursive = (output, path, files, action, cb) => {
   inner(0);
 };
 
-// TODO handle termination ?
+// TODO handle being killed ?
 export const files_recursive = (output, path) => (action) => {
   readdir_sorted(path, (err, files) => {
     if (err) {

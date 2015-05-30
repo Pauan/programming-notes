@@ -151,12 +151,12 @@ const task_queue_flush = () => {
 
       // Process any remaining tasks
       } else {
-        // TODO this is necessary in order to terminate infinite loops, but is there a better way ?
+        // TODO this is necessary in order to kill infinite loops, but is there a better way ?
         nextTick(loop);
       }
     };
 
-    // TODO this is necessary in order to terminate infinite loops, but is there a better way ?
+    // TODO this is necessary in order to kill infinite loops, but is there a better way ?
     nextTick(loop);
   }
 };

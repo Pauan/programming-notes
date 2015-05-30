@@ -1,5 +1,5 @@
 import { make_stream, with_stream, some, none } from "../../FFI/Stream"; // "nulan:Stream"
-import { protect_terminate, _finally } from "../../FFI/Task"; // "nulan:Task"
+import { protect_kill, _finally } from "../../FFI/Task"; // "nulan:Task"
 import { callback } from "./util/util";
 import { fs_readStream, fs_writeStream, read_from_Node, write_to_Node } from "./util/stream";
 import { open, close, symlink, mkdir, rename_safe } from "./util/fs";
@@ -36,7 +36,7 @@ const fs_close = (fd) => (action) => {
 };
 
 const fs_with_open = (path, flags, f) =>
-  protect_terminate(fs_open(path, flags), fs_close, (fd) =>
+  protect_kill(fs_open(path, flags), fs_close, (fd) =>
     _finally(f(fd), fs_close(fd)));
 
 
@@ -65,17 +65,18 @@ export const fs_make_directory = (path) => (action) => {
   mkdir(path, callback(action));
 };
 
-// TODO handle termination
+// TODO handle being killed
 // TODO what if there are readers for `path`?
 export const fs_remove = (path) => (action) => {
   remove(path, callback(action));
 };
 
-// TODO handle termination
+// TODO handle being killed
 export const fs_rename = (from, to) => (action) => {
   rename_safe(from, to, callback(action));
 };
 
+// TODO handle being killed
 export const fs_copy = (from, to) => (action) => {
   copy(from, to, callback(action));
 };
@@ -84,6 +85,7 @@ export const fs_files = (path) =>
   make_stream((output) =>
     files(output, path));
 
+// TODO handle being killed
 export const fs_files_recursive = (path) =>
   make_stream((output) =>
     files_recursive(output, path));
@@ -93,9 +95,10 @@ const fs_make_temporary_directory = (action) => {
 };
 
 export const fs_with_temporary_directory = (f) =>
-  protect_terminate(fs_make_temporary_directory, fs_remove, (path) =>
+  protect_kill(fs_make_temporary_directory, fs_remove, (path) =>
     _finally(f(path), fs_remove(path)));
 
+// TODO handle being killed
 export const fs_replace_file = (from, to) => (action) => {
   replace_file(from, to, callback(action));
 };

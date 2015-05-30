@@ -29,7 +29,7 @@
 
 (FUNCTION
   "When executed, executes the `Task`, but if it takes longer than a certain
-   number of milliseconds, the `Task` is terminated."
+   number of milliseconds, the `Task` is killed."
   (timeout :: (-> Integer (Task Void) (Task Void)))
   (timeout ms task)
     (fastest task (delay ms)))
