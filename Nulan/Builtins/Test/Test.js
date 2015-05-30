@@ -1,7 +1,7 @@
 import { _void, run_root, _bind, success, error, log, never, concurrent, protect_kill, _finally, fastest, run_thread, sequential } from "../FFI/Task";
 import { delay, current_time } from "../FFI/Time";
 import { pull, make_stream, with_stream, push, some, none } from "../FFI/Stream";
-import { read_file, make_file, files_recursive, remove, copy, rename, replace_file, with_temporary_directory } from "../Node.js/FFI/fs";
+import { read_file, make_file, all_files_in_directory, remove, copy, rename, replace_file, with_temporary_directory } from "../Node.js/FFI/fs";
 import { path, is_hidden_file } from "../Node.js/FFI/path";
 import { pipe, pipe_ignore_status, _arguments, stdin, pipe_stdout } from "../Node.js/FFI/script";
 
@@ -332,7 +332,7 @@ while (i--) {
   });
 }
 
-const main = () => _bind(files_from_directory_recursive("/home/pauan/Downloads"), log);*/
+const main = () => _bind(all_files_in_directory("/home/pauan/Downloads"), log);*/
 
 //const s = make_stream((push) => _bind(push("5"), (_) => push("10")));
 
@@ -367,7 +367,7 @@ setTimeout(() => {
   each(read_file("/home/pauan/Scratch/2014-09-30"), log);*/
 
 /*const main = () =>
-  _bind(files_from_directory_recursive("/home/pauan/Scratch"), (a) =>
+  _bind(all_files_in_directory("/home/pauan/Scratch"), (a) =>
     log(a.filter((x) => !is_hidden_file(x))));*/
 
 /*const main = () =>

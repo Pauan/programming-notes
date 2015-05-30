@@ -16,8 +16,8 @@
         | replace-file! = replace_file
 
         | with-temporary-directory = with_temporary_directory
-        | files = files
-        | files-recursive = files_recursive }
+        | files-in-directory = files_in_directory
+        | all-files-in-directory = all_files_in_directory }
 
   (FFI-IMPORT "FFI/fs"
     (read_file :: (-> String (Stream String)))
@@ -38,9 +38,9 @@
 
     (replace_file :: (-> String String (Task Void)))
 
-    (files :: (-> String (Stream String)))
+    (files_in_directory :: (-> String (Stream String)))
 
-    (files_recursive :: (-> String (Stream String)))))
+    (all_files_in_directory :: (-> String (Stream String)))))
 
 
 # TODO maybe make this a primitive that *only* returns a temporary path ?

@@ -58,12 +58,12 @@ export const copy = (from, to) => (action) => {
   fs_copy(from, to, callback(action));
 };
 
-export const files = (path) =>
+export const files_in_directory = (path) =>
   make_stream((output) =>
     fs_files(output, path));
 
 // TODO handle being killed
-export const files_recursive = (path) =>
+export const all_files_in_directory = (path) =>
   make_stream((output) =>
     fs_files_recursive(output, path));
 
