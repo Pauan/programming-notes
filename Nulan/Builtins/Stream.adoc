@@ -65,10 +65,16 @@
              (push! out value))))))
 
 (IMPLEMENT (Stream a)
+
+  (empty)
+    (make-stream -> _ void)
+
+
   (map in f)
     (make-stream -> out
       (each in -> value
         (push! out (f value))))
+
 
   (concat @s)
     (make-stream -> out

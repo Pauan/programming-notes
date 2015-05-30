@@ -1,8 +1,9 @@
-import { _void, run_root, _bind, success, error, log, never, concurrent, protect_terminate, _finally, fastest, run_thread } from "../FFI/Task";
+import { _void, run_root, _bind, success, error, log, never, concurrent, protect_terminate, _finally, fastest, run_thread, sequential } from "../FFI/Task";
 import { delay, current_time } from "../FFI/Time";
 import { pull, make_stream, with_stream, push, some, none } from "../FFI/Stream";
 import { fs_read_file, fs_make_file, fs_files_recursive, fs_remove, fs_copy, fs_rename, fs_replace_file, fs_with_temporary_directory } from "../Node.js/FFI/fs";
 import { path, is_hidden_file } from "../Node.js/FFI/path";
+import { pipe, pipe_ignore_status, _arguments, stdin, pipe_stdout } from "../Node.js/FFI/script";
 
 
 const debug = (s, x) => {
@@ -23,6 +24,9 @@ const ignore = (x) =>
 
 const ignore_concurrent = (a) =>
   ignore(concurrent(a));
+
+const ignore_sequential = (a) =>
+  ignore(sequential(a));
 
 const forever = (task) =>
   _bind(task, (_) => forever(task));
@@ -45,17 +49,23 @@ const benchmark = (task) =>
 
 
 // Stream.adoc
+const empty = () =>
+  make_stream((_) => _void);
+
+const concat = (s) =>
+  make_stream((out) =>
+    ignore_sequential(s["map"]((s) =>
+      each(s, (value) =>
+        push(out, value)))));
+
 const each = (s, f) =>
   with_stream(s, some, none, (_in) => {
-    const next = () =>
-      _bind(pull(_in), (u) => {
-        if (u["length"]) {
-          return _bind(f(u[0]), (_) => next());
-        } else {
-          return _void;
-        }
-      });
-    return next();
+    const loop = () =>
+      _bind(pull(_in), (u) =>
+        (u["length"]
+          ? _bind(f(u[0]), (_) => loop())
+          : _void));
+    return loop();
   });
 
 const merge = (s) =>
@@ -146,6 +156,13 @@ const one =
 const increment = (i) =>
   _bind(log(i), (_) => increment(i + 1));
 
+const pull1 = (s, f) =>
+  with_stream(s, some, none, (s) =>
+    _bind(pull(s), (v) =>
+      (v["length"]
+        ? f(v[0])
+        : _void)));
+
 
 //////////////////////////////////////////////////////////////////////////////
 
@@ -195,6 +212,26 @@ const increment = (i) =>
       });
     return next();
   });*/
+
+
+//////////////////////////////////////////////////////////////////////////////
+
+
+const main = () =>
+  pull1(pipe(empty, "ls", []), log);
+
+/*const main = () =>
+  pipe_stdout(pipe(empty, "ls", []));*/
+
+/*const main = () =>
+  pipe_stdout(merge([pipe(empty, "echo", ["hello"]),
+                     pipe(empty, "echo", ["world"])]));*/
+
+/*const main = () =>
+  pipe_stdout(pipe(pipe_ignore_status(pipe(empty,
+    "find", [_arguments[0], "-type", "f", "-print0"]),
+    "xargs", ["-0", "grep", "foo"]),
+    "wc", ["-l"]));*/
 
 
 //////////////////////////////////////////////////////////////////////////////
@@ -253,9 +290,9 @@ const increment = (i) =>
 /*const main = () =>
   fs_copy_file("/home/pauan/Scratch/2014-09-30", "/home/pauan/Scratch/tmp/foo");*/
 
-const main = () =>
+/*const main = () =>
   fs_map_file("/home/pauan/Scratch/tmp/foo", (s) =>
-    map(s, (s) => s["toLocaleUpperCase"]()));
+    map(s, (s) => s["toLocaleUpperCase"]()));*/
 
 /*const main = () =>
   fs_make_file("/home/pauan/Scratch/tmp/foo",

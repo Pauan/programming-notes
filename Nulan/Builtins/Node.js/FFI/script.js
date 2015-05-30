@@ -31,7 +31,12 @@ export const spawn = (cmd, args, opts) => {
   const on_success = (code, signal, action) => {
     // TODO is this correct ?
     if (code === null) {
-      action.error(new Error("Command \"" + cmd + "\" failed with signal " + signal));
+      // TODO Is it guaranteed that this only happens if we kill the process ?
+      if (signal === "SIGTERM") {
+        action.success(undefined);
+      } else {
+        action.error(new Error("Command \"" + cmd + "\" failed with signal " + signal));
+      }
 
     } else if (code === 0 || opts.ignoreStatus) {
       action.success(undefined);
