@@ -1,3 +1,17 @@
+import { _bind, _void } from "../../../FFI/Task"; // "nulan:Task"
+
+
+// TODO this should probably be in a different module
+export const each_array = (array, f) => {
+  const loop = (i) =>
+    (i < array["length"]
+      ? _bind(f(array[i]), (_) => loop(i + 1))
+      : _void);
+
+  return loop(0);
+};
+
+
 let RUNNING = 0;
 const MAX_RUNNING = 100; // Somewhat arbitrary number
 const PENDING = []; // TODO use Queue ?

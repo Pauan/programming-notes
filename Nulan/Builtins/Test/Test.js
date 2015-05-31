@@ -331,16 +331,19 @@ const pull1 = (s) =>
 /*const main = () =>
   with_stream(all_files_in_directory("/home/pauan/Downloads"), some, none, (s) => _bind(pull(s), log));*/
 
-const main = () =>
+/*const main = () =>
   _bind(delay(1000), (_) =>
-    error("Hiya"));
+    error("Hiya"));*/
 
 /*const main = () =>
   _bind(stream_length(all_files_in_directory("/home/pauan/Downloads")), log);*/
 
+const main = () =>
+  fastest([_void, forever(log("1"))]);
+
 /*const main = () =>
   _bind(benchmark(_bind(remove("/home/pauan/Scratch/tmp/foo"), (_) =>
-                    copy_file("/home/pauan/Scratch/2014-09-30", "/home/pauan/Scratch/tmp/foo"))), log);*/
+                    copy("/home/pauan/Scratch/2014-09-30", "/home/pauan/Scratch/tmp/foo"))), log);*/
 
 /*let i = 1013;
 while (i--) {

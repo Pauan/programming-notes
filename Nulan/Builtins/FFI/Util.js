@@ -114,11 +114,25 @@ export const nextTick =
     : (f) => { setTimeout(f, 0) });  // ~750
 */
 
-// TODO if this just calls `f` without using `setImmediate`,
-//      it's significantly faster, but overflows are now possible,
-//      and infinite loops can't be stopped
+//let ticks = 0;
+
+// Arbitrary number, as long as it's smaller than the maximum stack size
+// http://www.browserscope.org/user/tests/table/agt1YS1wcm9maWxlcnINCxIEVGVzdBi9qbEUDA?v=3&layout=simple
+//const MAX_TICKS = 500;
+
 const nextTick = (f) => {
   setImmediate(f);
+
+  // TODO We can't use this trick because it breaks `(fastest void (forever (log "1")))`
+  /*if (ticks < MAX_TICKS) {
+    ++ticks;
+    f();
+
+  } else {
+    ticks = 0;
+    // `setTimeout` is always slower than `setImmediate`
+    setImmediate(f);
+  }*/
 };
 
 

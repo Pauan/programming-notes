@@ -1,20 +1,10 @@
+import { each_array } from "./util";
 import { fs_readdir } from "./fs";
 import { push_Array } from "./stream";
 import { push } from "../../../FFI/Stream"; // "nulan:Stream"
-import { _bind, on_error, _void, _error } from "../../../FFI/Task"; // "nulan:Task"
+import { _bind, on_error, _error } from "../../../FFI/Task"; // "nulan:Task"
 
 const _path = require("path");
-
-
-// TODO this should probably be in a different module
-export const each_array = (array, f) => {
-  const loop = (i) =>
-    (i < array["length"]
-      ? _bind(f(array[i]), (_) => loop(i + 1))
-      : _void);
-
-  return loop(0);
-};
 
 
 const readdir_sorted = (path) => (action) => {
