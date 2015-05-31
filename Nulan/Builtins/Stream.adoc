@@ -41,6 +41,7 @@
       (with_stream s *some *none f)))
 
 
+# TODO rename to stream-each ?
 (FUNCTION
   (each :: (-> (Stream a)
                (-> a (Task Void))
@@ -64,7 +65,7 @@
       (each in -> value
         (push! out (f value))))
 
-  (concat @s)
+  (++ @s)
     (make-stream -> out
       (ignore-sequential
         @(map s -> s
@@ -80,6 +81,7 @@
            (each s -> value
              (push! out value))))))
 
+# TODO make this generic ?
 (FUNCTION
   (keep :: (-> (Stream a)
                (-> a Boolean)
@@ -91,13 +93,14 @@
           (push! out value)
           void))))
 
+# TODO make this generic ?
 (FUNCTION
-  (foldl :: (-> (Stream a)
-                b
-                # TODO maybe the function should return `b` rather than `(Task b)` ?
-                (-> b a (Task b))
-                (Task b)))
-  (foldl s init f)
+  (stream-foldl :: (-> (Stream a)
+                       b
+                       # TODO maybe the function should return `b` rather than `(Task b)` ?
+                       (-> b a (Task b))
+                       (Task b)))
+  (stream-foldl s init f)
     (with-stream s -> in
       (LOOP old = init
         (DO-MATCH (pull! in)
@@ -107,14 +110,22 @@
             (DO new = (f old value)
                 (loop new))))))
 
-# TODO maybe convert the Stream into a List, and then use (concat @list) ?
+# TODO make this generic ?
+(FUNCTION
+  (stream-length :: (-> (Stream a) (Task Integer)))
+  (stream-length s)
+    (stream-foldl s 0 -> old _
+      (wrap (+ old 1))))
+
+# TODO maybe convert the Stream into a List, and then use (++ @list) ?
 (FUNCTION
   # TODO is this correct ?
-  (join :: (-> (Stream a) (Task a)))
-  (join in)
-    (foldl in (empty) -> old new
-      (wrap (concat old new))))
+  (stream-join :: (-> (Stream a) (Task a)))
+  (stream-join in)
+    (stream-foldl in (empty) -> old new
+      (wrap (++ old new))))
 
+# TODO make this generic ?
 (FUNCTION
   # TODO this type signature is probably wrong
   (flatten :: (-> (Stream a) (Stream b)))
@@ -157,7 +168,7 @@
 (FUNCTION
   (accumulate :: (-> (Stream Integer) (Task Integer)))
   (accumulate in)
-    (foldl in 0 -> old value
+    (stream-foldl in 0 -> old value
       (LET new = (add old value)
         (DO (log! new)
             (wrap new)))))

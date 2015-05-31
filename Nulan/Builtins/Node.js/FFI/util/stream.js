@@ -4,17 +4,6 @@ import { run, _bind, _void } from "../../../FFI/Task"; // "nulan:Task"
 const _fs = require("fs");
 
 
-// TODO this should probably be in a different module, maybe "nulan:Stream"
-export const push_Array = (output, array) => {
-  const loop = (i) =>
-    (i < array["length"]
-      ? _bind(push(output, array[i]), (_) => loop(i + 1))
-      : _void);
-
-  return loop(0);
-};
-
-
 export const fs_readStream = (fd) =>
   _fs["createReadStream"](null, {
     "encoding": "utf8",

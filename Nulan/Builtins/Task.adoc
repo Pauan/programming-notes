@@ -15,6 +15,8 @@
         | log! = log
         | warn! = warn }
 
+  (TYPE Error)
+
   (FFI-IMPORT "FFI/Task"
     _void :: (Task Void)
 
@@ -25,8 +27,10 @@
     (success :: (-> a (Task a)))
 
 
-    "When executed, causes an error to occur."
-    (error :: (-> String (Task a)))
+    (_error :: (-> Error (Task a)))
+
+
+    (make_error :: (-> String Error))
 
 
     "When executed, it never returns."
@@ -171,6 +175,12 @@
      executes the `Task`. Any errors are logged to the console."
     (FFI-PROGRAM-START)
       `(run_root ,(symbol "main")))
+
+  (FUNCTION
+    "When executed, causes an error to occur."
+    (error :: (-> String (Task a)))
+    (error s)
+      (_error (make_error s)))
 
   (IMPLEMENT Task
     "When executed, returns its argument."

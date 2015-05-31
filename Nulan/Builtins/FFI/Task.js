@@ -113,13 +113,16 @@ export const run = (task, onSuccess, onError) => {
 
 export const noop = () => {};
 
-// There's no standard way to kill a Promise
+// There's currently no standard way to kill a Promise
+// https://github.com/promises-aplus/cancellation-spec/issues
 export const Task_from_Promise = (f) => (action) => {
   f()["then"](action.success, action.error);
 };
 
 export const Promise_from_Task = (task) =>
   new Promise((resolve, reject) => {
+    // There's currently no standard way to kill a Promise
+    // https://github.com/promises-aplus/cancellation-spec/issues
     run(task, resolve, reject);
   });
 
@@ -180,12 +183,11 @@ export const success = (x) => (action) => {
   action.success(x);
 };
 
-export const error = (s) => {
-  // TODO better stack traces
-  const e = new Error(s);
-  return (action) => {
-    action.error(e);
-  };
+// TODO better stack traces
+export const make_error = (s) => new Error(s);
+
+export const _error = (err) => (action) => {
+  action.error(err);
 };
 
 // TODO what if the action is killed ?
@@ -241,6 +243,31 @@ export const protect_kill = (task, onKilled, onSuccess) => (action) => {
 
   action.onKilled = () => {
     killed = true;
+  };
+};
+
+export const on_error = (task, onError, onSuccess) => (action) => {
+  let killed = false;
+
+  const success = (value) => {
+    if (!killed) {
+      action.onKilled = null;
+      onSuccess(value)(action);
+    }
+  };
+
+  const error = (err) => {
+    if (!killed) {
+      action.onKilled = null;
+      onError(err)(action);
+    }
+  };
+
+  const t = run(task, success, error);
+
+  action.onKilled = () => {
+    killed = true;
+    t.kill();
   };
 };
 

@@ -1,7 +1,7 @@
-import { _void, run_root, _bind, success, error, log, never, concurrent, protect_kill, _finally, fastest, run_thread, sequential } from "../FFI/Task";
+import { _void, run_root, _bind, success, make_error, _error, log, never, concurrent, protect_kill, _finally, fastest, run_thread, sequential } from "../FFI/Task";
 import { delay, current_time } from "../FFI/Time";
 import { pull, make_stream, with_stream, push, some, none } from "../FFI/Stream";
-import { read_file, make_file, all_files_in_directory, remove, copy, move, replace_file, with_temporary_directory } from "../Node.js/FFI/fs";
+import { read_file, make_file, files_in_directory, all_files_in_directory, remove, copy, move, replace_file, with_temporary_directory } from "../Node.js/FFI/fs";
 import { path, is_hidden_file } from "../Node.js/FFI/path";
 import { pipe, pipe_ignore_status, _arguments, stdin, pipe_stdout } from "../Node.js/FFI/script";
 
@@ -30,6 +30,9 @@ const ignore_sequential = (a) =>
 
 const forever = (task) =>
   _bind(task, (_) => forever(task));
+
+const error = (s) =>
+  _error(make_error(s));
 
 
 // Time.adoc
@@ -74,7 +77,7 @@ const merge = (s) =>
       each(s, (value) =>
         push(out, value)))));
 
-const foldl = (init, s, f) =>
+const stream_foldl = (s, init, f) =>
   with_stream(s, some, none, (_in) => {
     const next = (old) =>
       _bind(pull(_in), (u) => {
@@ -86,6 +89,9 @@ const foldl = (init, s, f) =>
       });
     return next(init);
   });
+
+const stream_length = (s) =>
+  stream_foldl(s, 0, (old, _) => success(old + 1));
 
 const map = (_in, f) =>
   make_stream((out) =>
@@ -125,7 +131,7 @@ const generate_multiply = (init, inc) =>
   generate(init, (x) => x * inc);
 
 const accumulate = (_in) =>
-  foldl(0, _in, (old, value) => {
+  stream_foldl(_in, 0, (old, value) => {
     const _new = old + value;
     return _bind(log(_new), (_) => success(_new));
   });
@@ -318,6 +324,19 @@ const pull1 = (s) =>
 
 /*const main = () =>
   move("/home/pauan/Scratch/tmp/foo", "/home/pauan/Scratch/tmp/foo3");*/
+
+/*const main = () =>
+  with_stream(files_in_directory("/home/pauan/Downloads"), some, none, (s) => log("foo"));*/
+
+/*const main = () =>
+  with_stream(all_files_in_directory("/home/pauan/Downloads"), some, none, (s) => _bind(pull(s), log));*/
+
+const main = () =>
+  _bind(delay(1000), (_) =>
+    error("Hiya"));
+
+/*const main = () =>
+  _bind(stream_length(all_files_in_directory("/home/pauan/Downloads")), log);*/
 
 /*const main = () =>
   _bind(benchmark(_bind(remove("/home/pauan/Scratch/tmp/foo"), (_) =>
