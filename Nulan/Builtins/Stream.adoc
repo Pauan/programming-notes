@@ -41,20 +41,54 @@
       (with_stream s *some *none f)))
 
 
+(FUNCTION
+  (each-output! :: (-> (Output a)
+                       (-> a (Task Void))
+                       (Task Void)))
+  (each-output! in f)
+    (LOOP
+      (DO-MATCH (pull! in)
+        (*none)
+          void
+        (*some value)
+          (DO (f value)
+              (loop)))))
+
+(FUNCTION
+  (drain-output! :: (-> (Output a) (Task Void)))
+  (drain-output! in)
+    (LOOP
+      (DO-MATCH (pull! in)
+        (*none)
+          void
+        (*some _)
+          (loop))))
+
+(FUNCTION
+  (drain :: (-> (Stream a) (Task Void)))
+  (drain in)
+    (with-stream in drain-output!))
+
 # TODO rename to stream-each ?
 (FUNCTION
   (each :: (-> (Stream a)
                (-> a (Task Void))
                (Task Void)))
-  (each s f)
-    (with-stream s -> in
-      (LOOP
-        (DO-MATCH (pull! in)
-          (*none)
-            void
-          (*some value)
-            (DO (f value)
-                (loop))))))
+  (each in f)
+    (with-stream in -> in
+      (each-output! in f)))
+
+(FUNCTION
+  (throttle :: (-> (Stream a) Integer (Stream a)))
+  (throttle in ms)
+    (make-stream -> out
+      (with-stream in -> in
+        (each-output! in -> value
+          (DO (fastest
+                (push! out value)
+                (DO (drain-output! in)
+                    never))
+              (timeout (drain-output! in) ms))))))
 
 (IMPLEMENT (Stream a)
   (empty)
