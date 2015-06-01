@@ -84,11 +84,12 @@
     (make-stream -> out
       (with-stream in -> in
         (each-output! in -> value
-          (DO (fastest
-                (push! out value)
-                (DO (drain-output! in)
-                    never))
-              (timeout (drain-output! in) ms))))))
+          (ignore-concurrent
+            (fastest
+              (push! out value)
+              (DO (drain-output! in)
+                  never))
+            (timeout (drain-output! in) ms))))))
 
 (IMPLEMENT (Stream a)
   (empty)
