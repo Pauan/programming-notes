@@ -1,4 +1,4 @@
-import { _void, run_root, _bind, success, make_error, _error, log, never, concurrent, protect_kill, _finally, fastest, run_thread, sequential } from "../FFI/Task";
+import { _void, run_root, _bind, success, make_error, _error, log, never, concurrent, protect_kill, _finally, fastest, run_thread, sequential, noop, run } from "../FFI/Task";
 import { delay, current_time } from "../FFI/Time";
 import { pull, make_stream, with_stream, push, some, none } from "../FFI/Stream";
 import { read_file, make_file, files_in_directory, all_files_in_directory, remove, copy, move, replace_file, with_temporary_directory } from "../Node.js/FFI/fs";
@@ -36,6 +36,9 @@ const error = (s) =>
 
 
 // Time.adoc
+const timeout = (task, ms) =>
+  fastest([task, delay(ms)]);
+
 const benchmark = (task) =>
   _bind(current_time, (now) => {
     const end = now + 10000;
@@ -61,15 +64,52 @@ const concat = (s) =>
       each(s, (value) =>
         push(out, value)))));
 
-const each = (s, f) =>
-  with_stream(s, some, none, (_in) => {
-    const loop = () =>
-      _bind(pull(_in), (u) =>
-        (u["length"]
-          ? _bind(f(u[0]), (_) => loop())
-          : _void));
-    return loop();
-  });
+const drain_output = (_in) => {
+  const loop = () =>
+    _bind(pull(_in), (u) =>
+      (u["length"]
+        ? loop()
+        : _void));
+  return loop();
+};
+
+const each_output = (_in, f) => {
+  const loop = () =>
+    _bind(pull(_in), (u) =>
+      (u["length"]
+        ? _bind(f(u[0]), (_) => loop())
+        : _void));
+  return loop();
+};
+
+const push_drain = (_in, out, value) =>
+  fastest([
+    push(out, value),
+    _bind(drain_output(_in), (_) =>
+      never)
+  ]);
+
+const drain = (_in) =>
+  with_stream(_in, some, none, drain_output);
+
+const each = (_in, f) =>
+  with_stream(_in, some, none, (_in) =>
+    each_output(_in, f));
+
+const throttle = (_in, ms) =>
+  make_stream((out) =>
+    with_stream(_in, some, none, (_in) =>
+      each_output(_in, (value) =>
+        ignore_concurrent([
+          push_drain(_in, out, value),
+          timeout(drain_output(_in), ms)
+        ]))));
+
+const dropping = (_in) =>
+  make_stream((out) =>
+    with_stream(_in, some, none, (_in) =>
+      each_output(_in, (value) =>
+        push_drain(_in, out, value))));
 
 const merge = (s) =>
   make_stream((out) =>
@@ -80,13 +120,10 @@ const merge = (s) =>
 const stream_foldl = (s, init, f) =>
   with_stream(s, some, none, (_in) => {
     const next = (old) =>
-      _bind(pull(_in), (u) => {
-        if (u["length"]) {
-          return _bind(f(old, u[0]), next);
-        } else {
-          return success(old);
-        }
-      });
+      _bind(pull(_in), (u) =>
+        (u["length"]
+          ? _bind(f(old, u[0]), next)
+          : success(old)));
     return next(init);
   });
 
@@ -169,9 +206,80 @@ const pull1 = (s) =>
   with_stream(s, some, none, (s) =>
     ignore(pull(s)));
 
+const test_events = make_stream((out) => (action) => {
+  for (let i = 0; i < 40; ++i) {
+    setInterval(() => {
+      const t = run(push(out, 0), noop, action.error);
+
+      action.onKilled = () => {
+        t.kill();
+      };
+    }, 0);
+  }
+});
+
+const test_delays = make_stream((out) =>
+  forever(
+    _bind(push(out, 1), (_) =>
+    _bind(delay(1000), (_) =>
+    _bind(push(out, 2), (_) =>
+    _bind(push(out, 3), (_) =>
+    _bind(push(out, 4), (_) =>
+    _bind(delay(150), (_) =>
+    _bind(push(out, 5), (_) =>
+    _bind(delay(150), (_) =>
+    _bind(push(out, 6), (_) =>
+    _bind(delay(300), (_) =>
+    _bind(push(out, 7), (_) =>
+    _bind(delay(398), (_) =>
+    _bind(push(out, 8), (_) =>
+    _bind(delay(1500), (_) =>
+    _bind(push(out, 9), (_) =>
+    _bind(delay(2000), (_) =>
+    _bind(push(out, 10), (_) =>
+    _bind(delay(999), (_) =>
+    _bind(push(out, 11), (_) =>
+    _bind(delay(1001), (_) =>
+          push(out, 12)))))))))))))))))))))));
+/*
+1
+3
+8
+9
+10
+12
+2
+9
+10
+12
+2
+8
+9
+10
+12
+*/
 
 //////////////////////////////////////////////////////////////////////////////
 
+
+const main = () =>
+  each(dropping(generate_add(0, 1)), log);
+
+/*const main = () =>
+  each(throttle(test_events, 1000), log);*/
+
+/*const main = () =>
+  each(throttle(generate_add(0, 1), 1000), log);*/
+
+/*const main = () =>
+  stream_foldl(throttle(generate_add(0, 1), 1000), Date["now"](), (old, value) => {
+    const now = Date["now"]();
+    console.log(now - old);
+    return success(now);
+  });*/
+
+/*const main = () =>
+  each(throttle(test_delays, 1000), log);*/
 
 /*const main = () =>
   with_stream(make_stream((s) => push(s, 5)), some, none, (s) => _bind(delay(1000), (_) => pull(s)));*/
@@ -243,6 +351,20 @@ const pull1 = (s) =>
     "find", [_arguments[0], "-type", "f", "-print0"]),
     "xargs", ["-0", "grep", "foo"]),
     "wc", ["-l"]));*/
+
+
+//////////////////////////////////////////////////////////////////////////////
+
+
+/*const main = () =>
+  ignore_concurrent([
+    copy("/home/pauan/Scratch/2014-09-30", "/home/pauan/Scratch/tmp/foo-file"),
+    copy("/home/pauan/Scratch/programming-notes", "/home/pauan/Scratch/tmp/foo-dir"),
+    copy("/home/pauan/bin/browserify", "/home/pauan/Scratch/tmp/foo-symlink")
+  ]);*/
+
+/*const main = () =>
+  remove("/home/pauan/Scratch/tmp/foo-dir");*/
 
 
 //////////////////////////////////////////////////////////////////////////////
@@ -338,8 +460,8 @@ const pull1 = (s) =>
 /*const main = () =>
   _bind(stream_length(all_files_in_directory("/home/pauan/Downloads")), log);*/
 
-const main = () =>
-  fastest([_void, forever(log("1"))]);
+/*const main = () =>
+  fastest([_void, forever(log("1"))]);*/
 
 /*const main = () =>
   _bind(benchmark(_bind(remove("/home/pauan/Scratch/tmp/foo"), (_) =>

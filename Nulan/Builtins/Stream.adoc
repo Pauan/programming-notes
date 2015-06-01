@@ -65,6 +65,17 @@
           (loop))))
 
 (FUNCTION
+  (push-drain! :: (-> (Output a) (Input b) b (Task Void)))
+  (push-drain! in out value)
+    # TODO when `drain-output!` gets killed, does it *immediately* stop,
+    #      or is there the possibility that it will consume 1 extra
+    #      value from the Stream ?
+    (fastest
+      (push! out value)
+      (DO (drain-output! in)
+          never)))
+
+(FUNCTION
   (drain :: (-> (Stream a) (Task Void)))
   (drain in)
     (with-stream in drain-output!))
@@ -85,11 +96,19 @@
       (with-stream in -> in
         (each-output! in -> value
           (ignore-concurrent
-            (fastest
-              (push! out value)
-              (DO (drain-output! in)
-                  never))
+            (push-drain! in out value)
             (timeout (drain-output! in) ms))))))
+
+# TODO maybe make this into a primitive, and have an argument for the buffer size ?
+# TODO even if the consumer consumes as fast as possible, it still drops every other value
+(FUNCTION
+  # TODO this name isn't quite correct
+  (dropping :: (-> (Stream a) (Stream a)))
+  (dropping in)
+    (make-stream -> out
+      (with-stream in -> in
+        (each-output! in -> value
+          (push-drain! in out value)))))
 
 (IMPLEMENT (Stream a)
   (empty)
