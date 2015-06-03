@@ -5,9 +5,11 @@
 
 (TYPE (Task value))
 
+(INTERFACE (%Error t)
+  (error :: (-> String (t a))))
+
 (EXPORT { FFI-PROGRAM-START
         | void = _void
-        | error
         | never
         | sequential
         | concurrent
@@ -176,13 +178,12 @@
     (FFI-PROGRAM-START)
       `(run_root ,(symbol "main")))
 
-  (FUNCTION
+  (IMPLEMENT (%Error (Task a))
     "When executed, causes an error to occur."
-    (error :: (-> String (Task a)))
     (error s)
       (_error (make_error s)))
 
-  (IMPLEMENT Task
+  (IMPLEMENT (%Monad (Task a))
     "When executed, returns its argument."
     (wrap x)
       (success x)
