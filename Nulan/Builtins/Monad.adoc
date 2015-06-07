@@ -1,0 +1,48 @@
+.Maybe.nu
+[source]
+----
+(TYPE Void)
+
+(INTERFACE (%Monad t)
+  (wrap :: (-> a (t a)))
+  (bind :: (-> (t a) (-> a (t b)) (t b))))
+
+(MACRO
+  (DO @statements last)
+    (foldr statements last -> new old
+      (MATCH new
+        `(,n = ,x)
+          `(bind ,x -> ,n ,old)
+        x
+          `(bind ,x -> (_ :: Void) ,old))))
+
+(MACRO
+  (DO-MATCH x @cases)
+    (WITH-UNIQUE u
+      `(DO ,u = ,x
+         (MATCH ,u
+           ,@cases))))
+
+# TODO implement this
+(FUNCTION
+  (sequential :: (IMPLEMENT (%Monad a)
+                   (-> @(a b) (a (List b))))))
+
+# TODO better name for this
+(FUNCTION
+  "The same as `sequential`, except it returns `Void` rather than a `List`."
+  (ignore-sequential :: (IMPLEMENT (%Monad a)
+                          (-> @(a Void) (a Void))))
+  (ignore-sequential @in)
+    (DO _ = (sequential @in)
+        void))
+
+(FUNCTION
+  "Runs the `%Monad` repeatedly, as quickly as possible, forever."
+  (forever :: (IMPLEMENT (%Monad a)
+                # TODO maybe this should return `(a Void)` rather than `(a b)` ?
+                (-> (a Void) (a b))))
+  (forever x)
+    (DO x
+        (forever x)))
+----
