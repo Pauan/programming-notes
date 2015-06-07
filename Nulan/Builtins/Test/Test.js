@@ -66,7 +66,18 @@ const concat = (s) =>
 
 const drain_output = (_in) => {
   const loop = () =>
-    _bind(pull(_in), (u) =>
+    _bind(pull(_in)
+    /*(action) => {
+      console.log("PULLING");
+      const t = run(pull(_in), (value) => {
+        console.log("PULLING VALUE");
+        action.success(value);
+      }, action.error);
+
+      action.onKilled = () => {
+        console.log("PULLING KILLED", t.kill());
+      };
+    }*/, (u) =>
       (u["length"]
         ? loop()
         : _void));
@@ -82,13 +93,6 @@ const each_output = (_in, f) => {
   return loop();
 };
 
-const push_drain = (_in, out, value) =>
-  fastest([
-    push(out, value),
-    _bind(drain_output(_in), (_) =>
-      never)
-  ]);
-
 const drain = (_in) =>
   with_stream(_in, some, none, drain_output);
 
@@ -100,16 +104,18 @@ const throttle = (_in, ms) =>
   make_stream((out) =>
     with_stream(_in, some, none, (_in) =>
       each_output(_in, (value) =>
-        ignore_concurrent([
-          push_drain(_in, out, value),
-          timeout(drain_output(_in), ms)
+        fastest([
+          ignore_concurrent([
+            push(out, value),
+            /*(action) => {
+              console.log("----");
+              console.log("PUSHING");
+              push(out, value)(action);
+            },*/
+            delay(ms)
+          ]),
+          _bind(drain_output(_in), (_) => never)
         ]))));
-
-const dropping = (_in) =>
-  make_stream((out) =>
-    with_stream(_in, some, none, (_in) =>
-      each_output(_in, (value) =>
-        push_drain(_in, out, value))));
 
 const merge = (s) =>
   make_stream((out) =>
@@ -262,14 +268,16 @@ const test_delays = make_stream((out) =>
 //////////////////////////////////////////////////////////////////////////////
 
 
-const main = () =>
-  each(dropping(generate_add(0, 1)), log);
+/*const main = () =>
+  //each(dropping(generate_add(0, 1)), log);
+  each(dropping(generate_add(0, 1), 1000), (value) =>
+    _bind(delay(997), (_) => log(value)));*/
 
 /*const main = () =>
   each(throttle(test_events, 1000), log);*/
 
-/*const main = () =>
-  each(throttle(generate_add(0, 1), 1000), log);*/
+const main = () =>
+  each(throttle(generate_add(0, 1), 1000), log);
 
 /*const main = () =>
   stream_foldl(throttle(generate_add(0, 1), 1000), Date["now"](), (old, value) => {
@@ -409,8 +417,7 @@ const main = () =>
 //const main = () => increment(0);
 
 /*const main = () =>
-  fastest([forever(_bind(current_time, log)),
-           delay(1000)]);*/
+  timeout(forever(_bind(current_time, log)), 1000);*/
 
 /*const main = () =>
   _bind(current_time, (now1) =>
@@ -459,6 +466,9 @@ const main = () =>
 
 /*const main = () =>
   _bind(stream_length(all_files_in_directory("/home/pauan/Downloads")), log);*/
+
+/*const main = () =>
+  _bind(fastest([success(2), success(1)]), log);*/
 
 /*const main = () =>
   fastest([_void, forever(log("1"))]);*/

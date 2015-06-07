@@ -1,9 +1,9 @@
 .Task.nu
 [source]
 ----
-(TYPE Void)
+(USE {} = "nulan:Monad")
 
-(TYPE (Task value))
+(TYPE (Task a))
 
 (INTERFACE (%Error t)
   (error :: (-> String (t a))))
@@ -171,6 +171,7 @@
      ----"
     (warn :: (-> String (Task Void))))
 
+
   # TODO is there a better way of handling this ?
   (MACRO
     "Calls the function `main` (which is supposed to return a `Task`) and then
@@ -193,36 +194,6 @@
     (bind x f)
       (_bind x f)))
 
-(MACRO
-  (DO @statements last)
-    (foldr statements last -> new old
-      (MATCH new
-        `(,n = ,x)
-          `(bind ,x -> ,n ,old)
-        x
-          `(bind ,x -> (_ :: Void) ,old))))
-
-(MACRO
-  (DO-MATCH x @cases)
-    (WITH-UNIQUE u
-      `(DO ,u = ,x
-         (MATCH ,u
-           ,@cases))))
-
-(FUNCTION
-  "When executed, executes the `Task` forever, as quickly as possible."
-  (forever :: (-> (Task Void) (Task a)))
-  (forever task)
-    (DO task
-        (forever task)))
-
-# TODO better name for this
-(FUNCTION
-  "The same as `sequential`, except it returns `Void` rather than a `List`."
-  (ignore-sequential :: (-> @(Task Void) (Task Void)))
-  (ignore-sequential @in)
-    (DO _ = (sequential @in)
-        void))
 
 # TODO better name for this
 (FUNCTION

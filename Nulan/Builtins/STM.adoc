@@ -2,6 +2,7 @@
 [source]
 ----
 (USE {} = "nulan:Task")
+(USE {} = "nulan:Monad")
 
 (TYPE (STM a))
 
@@ -68,6 +69,34 @@
 
     (bind x f)
       (_bind x f)))
+
+
+(TYPE (MRef a)
+  (*mref (Ref (Maybe a))))
+
+(FUNCTION
+  (make-mref :: (-> (MRef a)))
+  (make-mref)
+    (*mref (make-ref (*none))))
+
+(FUNCTION
+  (take :: (-> (MRef a) (STM a)))
+  (take (*mref ref))
+    (DO-MATCH (ref-get ref)
+      (*none)
+        (retry)
+      (*some value)
+        (DO (ref-set! ref (*none))
+            (wrap value))))
+
+(FUNCTION
+  (put! :: (-> (MRef a) a (STM Void)))
+  (put! (*mref ref) value)
+    (DO-MATCH (ref-get ref)
+      (*none)
+        (ref-set! ref (*some value))
+      (*some _)
+        (retry)))
 ----
 
 .Examples

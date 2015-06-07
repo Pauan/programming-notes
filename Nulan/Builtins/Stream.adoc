@@ -95,20 +95,14 @@
     (make-stream -> out
       (with-stream in -> in
         (each-output! in -> value
-          (ignore-concurrent
-            (push-drain! in out value)
-            (timeout (drain-output! in) ms))))))
-
-# TODO maybe make this into a primitive, and have an argument for the buffer size ?
-# TODO even if the consumer consumes as fast as possible, it still drops every other value
-(FUNCTION
-  # TODO this name isn't quite correct
-  (dropping :: (-> (Stream a) (Stream a)))
-  (dropping in)
-    (make-stream -> out
-      (with-stream in -> in
-        (each-output! in -> value
-          (push-drain! in out value)))))
+          (fastest
+            # TODO if the input Stream is finished, it will still wait `ms`
+            #      milliseconds before closing the output Stream
+            (ignore-concurrent
+              (push! out value)
+              (delay ms))
+            (DO (drain-output! in)
+                never))))))
 
 (IMPLEMENT (Stream a)
   (empty)

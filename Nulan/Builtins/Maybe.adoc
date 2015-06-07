@@ -27,4 +27,13 @@
         value
       (*none)
         y))
+
+# TODO is this a good idea ?
+# TODO probably get rid of this
+(FUNCTION
+  (some :: (-> (Maybe a) a))
+  (some x)
+    (MATCH-FAIL x
+      (*some x)
+        x))
 ----
