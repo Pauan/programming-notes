@@ -1,9 +1,0 @@
-.Lazy.nu
-[source]
-----
-(TYPE (Lazy a))
-
-(FFI-IMPORT "FFI/Lazy"
-  (lazy :: (-> (-> a) (Lazy a)))
-  (force :: (-> (Lazy a) a)))
-----
