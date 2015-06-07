@@ -1,0 +1,62 @@
+.Cast.nu
+[source]
+----
+(INTERFACE (%Cast-Maybe from to)
+  (cast-maybe :: (-> from (Maybe to))))
+
+(INTERFACE (%Cast from to)
+  (cast :: (-> from to)))
+
+# TODO will this work ?
+# TODO is this a good idea ?
+(IMPLEMENT (%Cast-Maybe a a)
+  (cast-maybe from)
+    (*some from))
+
+# TODO will this work ?
+# TODO is this a good idea ?
+(IMPLEMENT (%Cast a a)
+  (cast from)
+    from)
+
+# TODO will this work ?
+(IMPLEMENT (IMPLEMENT (%Cast a b)
+             (%Cast-Maybe a b))
+  (cast-maybe from)
+    (*some (cast from)))
+
+(EXPORT {}
+  (FFI-IMPORT (github "Pauan/nulan-builtins-ffi" "0.1.0" "Cast")
+    (String_to_Integer :: (-> String (-> Integer a) a a))
+    (Integer_to_String :: (-> Integer String))
+
+    (String_to_Float :: (-> String (-> Float a) a a))
+    (Float_to_String :: (-> Float String))
+
+    (Float_to_Integer :: (-> Float (-> Integer a) a a))
+    (Integer_to_Float :: (-> Integer Float)))
+
+  (IMPLEMENT (%Cast-Maybe String Integer)
+    (cast-maybe from)
+      (String_to_Integer from *some *none))
+
+  (IMPLEMENT (%Cast Integer String)
+    (cast-maybe from)
+      (Integer_to_String from))
+
+  (IMPLEMENT (%Cast-Maybe String Float)
+    (cast-maybe from)
+      (String_to_Float from *some *none))
+
+  (IMPLEMENT (%Cast Float String)
+    (cast-maybe from)
+      (Integer_to_String from))
+
+  (IMPLEMENT (%Cast-Maybe Float Integer)
+    (cast-maybe from)
+      (Float_to_Integer from *some *none))
+
+  (IMPLEMENT (%Cast Integer Float)
+    (cast-maybe from)
+      (Integer_to_Float from)))
+----
