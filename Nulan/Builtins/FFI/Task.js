@@ -62,7 +62,7 @@ export const run = (task, onSuccess, onError) => {
 
       } else {
         // TODO pretty printing for value
-        print_warning("Task succeeded after completing: " + value);
+        print_warning("Task succeeded after completing (state " + state + "): " + value);
       }
     },
 

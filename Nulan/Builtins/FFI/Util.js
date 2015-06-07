@@ -1,3 +1,14 @@
+// TODO is this correct ?
+export const isInteger = (x) =>
+  Number["isInteger"](x);
+
+export const isNaN = (x) =>
+  Number["isNaN"](x);
+
+export const isFloat = (x) =>
+  typeof x === "number" && !isNaN(x);
+
+
 export const error_stack = (e) => {
   if (e["stack"] != null) {
     return e["stack"];
