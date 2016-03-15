@@ -299,7 +299,15 @@ every time we want to add a new Task. So let's change the implementation:
 Rather than being a string and an array of arguments, a Task is now a function that when
 called will return a `JavaScript Promise <https://www.promisejs.org/>`_.
 
-Let's change our ``execute`` function so that it can handle Promises:
+The ``log`` and ``error`` functions are still pure, because a Task is a function, and
+functions are pure.
+
+It's only when we actually call the Task that it does impure things. As long as we
+don't call the Task, then it remains pure.
+
+----
+
+Let's change our ``execute`` function so that it calls the Task:
 
 .. code:: javascript
 
@@ -394,8 +402,8 @@ In addition, the ``delay`` function doesn't work the way we want it to:
 We expected it to wait for 1 second and then log to the console, but instead it logs to
 the console immediately!
 
-The problem is that there is no connection between the ``delay`` and the ``log``: it's
-like as if they were executing in two separate threads. So, let's add in another function:
+The problem is that there is no connection between the ``delay`` and the ``log``: they are
+both executing simultaneously. So, let's add in another function:
 
 .. code:: javascript
 
@@ -458,7 +466,7 @@ Let's add in some logging, so we can see exactly when it reads / writes the file
     });
   }
 
-Gosh that's awfully verbose. So let's add in some syntax sugar:
+Gosh, that's awfully hard to read. So let's add in some syntax sugar:
 
 .. code:: javascript
 
